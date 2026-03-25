@@ -148,9 +148,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     margin: const EdgeInsets.only(bottom: 12),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: accent.withOpacity(0.08),
+      color: accent.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: accent.withOpacity(0.2)),
+      border: Border.all(color: accent.withValues(alpha: 0.2)),
     ),
     child: Row(children: [
       Icon(icon, color: accent, size: 28),
@@ -176,9 +176,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: enabled ? Colors.green.withOpacity(0.08) : accent.withOpacity(0.08),
+        color: enabled ? Colors.green.withValues(alpha: 0.08) : accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: enabled ? Colors.green.withOpacity(0.3) : accent.withOpacity(0.2)),
+        border: Border.all(color: enabled ? Colors.green.withValues(alpha: 0.3) : accent.withValues(alpha: 0.2)),
       ),
       child: Row(children: [
         Icon(icon, color: enabled ? Colors.green : accent, size: 28),
@@ -204,7 +204,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         width: _currentPage == i ? 24 : 8,
         height: 8,
         decoration: BoxDecoration(
-          color: _currentPage == i ? accent : accent.withOpacity(0.3),
+          color: _currentPage == i ? accent : accent.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(4),
         ),
       )),
