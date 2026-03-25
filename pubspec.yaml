@@ -39,6 +39,9 @@ dependencies:
   # Shared prefs (for Kotlin service communication)
   shared_preferences: ^2.3.3
 
+  # HTTP client for CMS backend communication
+  http: ^1.2.2
+
   # Typography
   google_fonts: ^6.2.1
 

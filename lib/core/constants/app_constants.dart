@@ -42,4 +42,9 @@ class AppConstants {
   };
 
   static const String defaultAccentColor = 'blue';
+
+  // ── Backend API ─────────────────────────────────────────────────────────
+  // Android emulator → host machine localhost: 10.0.2.2
+  // Physical device (same Wi-Fi) → use your machine's local IP, e.g. 192.168.x.x
+  static const String apiBaseUrl = 'http://10.0.2.2:8000';
 }

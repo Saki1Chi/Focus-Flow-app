@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FocusFlow CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <style>
+    :root { --accent: #4A90E2; --bg: #06060f; --card: #0e0e1c; --border: rgba(255,255,255,0.07); }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      width: 230px; min-width: 230px; background: var(--card);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; height: 100vh;
+      position: sticky; top: 0;
+    }
+    .sidebar-brand { padding: 20px 16px 16px; border-bottom: 1px solid var(--border); }
+    .brand-icon {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #8E44AD);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-nav { padding: 10px 8px; flex: 1; overflow-y: auto; }
+    .sidebar .nav-link {
+      color: rgba(255,255,255,0.55); padding: 9px 12px; border-radius: 10px;
+      margin-bottom: 2px; display: flex; align-items: center; gap: 10px;
+      font-size: 13.5px; font-weight: 500; transition: all 0.18s; cursor: pointer;
+    }
+    .sidebar .nav-link:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.05); }
+    .sidebar .nav-link.active { color: var(--accent); background: rgba(74,144,226,0.12); }
+    .sidebar .nav-link i { font-size: 16px; width: 18px; text-align: center; }
+    .sidebar-footer {
+      padding: 12px; border-top: 1px solid var(--border);
+      font-size: 11px;
+    }
+    #status-dot { width: 7px; height: 7px; border-radius: 50%; background: #555; flex-shrink: 0; }
+    #status-dot.online { background: #22C55E; box-shadow: 0 0 6px #22C55E; }
+    #status-dot.offline { background: #EF4444; }
+
+    /* ── Main content ────────────────────────────────────────── */
+    .main-wrap { flex: 1; overflow-y: auto; min-height: 100vh; }
+    .view { padding: 28px; display: none; }
+    .view.active { display: block; }
+    .page-header { margin-bottom: 24px; }
+    .page-title { font-size: 22px; font-weight: 800; color: #fff; margin: 0; }
+    .page-subtitle { font-size: 13px; color: rgba(255,255,255,0.4); margin: 2px 0 0; }
+
+    /* ── Stat cards ──────────────────────────────────────────── */
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px 22px;
+    }
+    .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.35); text-transform: uppercase; }
+    .stat-value { font-size: 40px; font-weight: 800; line-height: 1; color: #fff; margin: 6px 0 0; }
+    .stat-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+
+    /* ── Tables ──────────────────────────────────────────────── */
+    .table-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+    }
+    .table { margin: 0; font-size: 13px; }
+    .table th { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+                color: rgba(255,255,255,0.35); padding: 14px 16px; border-color: var(--border); }
+    .table td { padding: 12px 16px; border-color: var(--border); vertical-align: middle; color: rgba(255,255,255,0.85); }
+    .table tbody tr:hover { background: rgba(255,255,255,0.025); }
+    .table-card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .table-card-header h6 { margin: 0; font-size: 14px; font-weight: 700; }
+
+    /* ── Status & Mode badges ────────────────────────────────── */
+    .badge-status {
+      font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px;
+    }
+    .badge-pending   { background: rgba(255,183,77,0.15);  color: #FFB74D; }
+    .badge-progress  { background: rgba(74,144,226,0.15);  color: #4A90E2; }
+    .badge-completed { background: rgba(39,174,96,0.15);   color: #27AE60; }
+    .badge-calendar  { background: rgba(142,68,173,0.15);  color: #8E44AD; }
+    .badge-smart     { background: rgba(230,126,34,0.15);  color: #E67E22; }
+    .badge-cat { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+
+    /* ── Category cards ──────────────────────────────────────── */
+    .cat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px; transition: border-color 0.2s;
+    }
+    .cat-card:hover { border-color: rgba(255,255,255,0.14); }
+    .cat-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+    }
+
+    /* ── Filter bar ──────────────────────────────────────────── */
+    .filter-bar {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .filter-bar .form-select,
+    .filter-bar .form-control {
+      font-size: 12px; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); color: #fff; min-width: 130px; max-width: 180px;
+    }
+    .filter-bar .form-select option { background: #1a1a2e; }
+
+    /* ── API info ────────────────────────────────────────────── */
+    .endpoint-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 20px; margin-bottom: 10px;
+    }
+    .method-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      font-family: monospace; min-width: 52px; text-align: center;
+    }
+    .method-get    { background: rgba(39,174,96,0.15);  color: #27AE60; }
+    .method-post   { background: rgba(74,144,226,0.15); color: #4A90E2; }
+    .method-put    { background: rgba(255,183,77,0.15); color: #FFB74D; }
+    .method-delete { background: rgba(239,68,68,0.15);  color: #EF4444; }
+    code { background: rgba(255,255,255,0.06); border-radius: 6px; padding: 2px 7px; font-size: 12px; }
+
+    /* ── Action buttons ──────────────────────────────────────── */
+    .btn-action { font-size: 12px; padding: 4px 10px; border-radius: 8px; }
+    .btn-accent { background: var(--accent); border: none; color: #fff; }
+    .btn-accent:hover { background: #3a7bc8; color: #fff; }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.3); }
+    .empty-state i { font-size: 48px; display: block; margin-bottom: 12px; opacity: 0.4; }
+
+    /* ── Modal ───────────────────────────────────────────────── */
+    .modal-content { background: #12121f; border: 1px solid var(--border); }
+    .modal-header, .modal-footer { border-color: var(--border); }
+    .form-control, .form-select { background: rgba(255,255,255,0.05); border-color: var(--border); color: #fff; }
+    .form-control:focus, .form-select:focus { background: rgba(255,255,255,0.07); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 3px rgba(74,144,226,0.15); }
+    .form-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6); margin-bottom: 5px; }
+    .form-select option { background: #12121f; }
+    input[type="color"] { height: 38px; padding: 3px 6px; }
+  </style>
+</head>
+<body>
+<div class="d-flex" style="height:100vh">
+
+  <!-- ══ Sidebar ════════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="d-flex align-items-center gap-2">
+        <div class="brand-icon">
+          <i class="bi bi-lightning-fill text-white" style="font-size:16px"></i>
+        </div>
+        <div>
+          <div class="fw-bold text-white" style="font-size:14px;line-height:1.2">FocusFlow</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:1.2px">CMS ADMIN</div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-link active" onclick="showView('dashboard')" data-view="dashboard">
+        <i class="bi bi-speedometer2"></i> Dashboard
+      </a>
+      <a class="nav-link" onclick="showView('tasks')" data-view="tasks">
+        <i class="bi bi-check2-square"></i> Tasks
+      </a>
+      <a class="nav-link" onclick="showView('categories')" data-view="categories">
+        <i class="bi bi-tags"></i> Categories
+      </a>
+      <a class="nav-link" onclick="showView('api')" data-view="api">
+        <i class="bi bi-code-slash"></i> API Info
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <div id="status-dot"></div>
+        <span id="status-text" style="color:rgba(255,255,255,0.4)">Connecting…</span>
+      </div>
+      <input id="api-url-input" type="text" class="form-control form-control-sm"
+             placeholder="http://localhost:8000" style="font-size:11px">
+      <button class="btn btn-sm w-100 mt-1" style="font-size:11px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)"
+              onclick="applyApiUrl()">
+        <i class="bi bi-arrow-repeat"></i> Connect
+      </button>
+    </div>
+  </aside>
+
+  <!-- ══ Main content ═══════════════════════════════════════════════════════ -->
+  <div class="main-wrap">
+
+    <!-- ── Dashboard ──────────────────────────────────────────────────────── -->
+    <section id="view-dashboard" class="view active">
+      <div class="page-header d-flex align-items-start justify-content-between">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Overview of all tasks and content</p>
+        </div>
+        <button class="btn btn-sm btn-accent" onclick="loadDashboard()">
+          <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="row g-3 mb-4" id="stat-cards">
+        <div class="col-6 col-md-3">
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="stat-label">Total Tasks</div>
+                <div class="stat-value" id="stat-total">—</div>
+              </div>
+              <div class="stat-icon" style="background:rgba(74,144,226,0.12);color:var(--accent)">
+                <i class="bi bi-list-check"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="stat-label">Pending</div>
+                <div class="stat-value" id="stat-pending">—</div>
+              </div>
+              <div class="stat-icon" style="background:rgba(255,183,77,0.12);color:#FFB74D">
+                <i class="bi bi-hourglass-split"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="stat-label">In Progress</div>
+                <div class="stat-value" id="stat-progress">—</div>
+              </div>
+              <div class="stat-icon" style="background:rgba(74,144,226,0.12);color:var(--accent)">
+                <i class="bi bi-arrow-repeat"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="stat-label">Completed</div>
+                <div class="stat-value" id="stat-completed">—</div>
+              </div>
+              <div class="stat-icon" style="background:rgba(39,174,96,0.12);color:#27AE60">
+                <i class="bi bi-check-circle"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent tasks table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <i class="bi bi-clock-history" style="color:var(--accent)"></i>
+          <h6>Recent Tasks</h6>
+          <span class="ms-auto">
+            <button class="btn btn-sm btn-accent" onclick="showView('tasks')">
+              View all <i class="bi bi-arrow-right"></i>
+            </button>
+          </span>
+        </div>
+        <div id="recent-tasks-container">
+          <div class="empty-state"><i class="bi bi-clock"></i>Loading…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tasks ───────────────────────────────────────────────────────────── -->
+    <section id="view-tasks" class="view">
+      <div class="page-header d-flex align-items-start justify-content-between">
+        <div>
+          <h1 class="page-title">Tasks</h1>
+          <p class="page-subtitle">Create, edit and manage all tasks</p>
+        </div>
+        <button class="btn btn-accent" onclick="openTaskModal(null)">
+          <i class="bi bi-plus-lg"></i> New Task
+        </button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-bar">
+        <select class="form-select" id="filter-status" onchange="applyTaskFilters()">
+          <option value="">All statuses</option>
+          <option value="0">Pending</option>
+          <option value="1">In Progress</option>
+          <option value="2">Completed</option>
+        </select>
+        <select class="form-select" id="filter-mode" onchange="applyTaskFilters()">
+          <option value="">All modes</option>
+          <option value="0">Calendar</option>
+          <option value="1">Smart</option>
+        </select>
+        <select class="form-select" id="filter-category" onchange="applyTaskFilters()">
+          <option value="">All categories</option>
+        </select>
+        <input type="date" class="form-control" id="filter-date" onchange="applyTaskFilters()" style="max-width:160px">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)"
+                onclick="clearTaskFilters()">
+          <i class="bi bi-x"></i> Clear
+        </button>
+        <span class="ms-auto text-muted" style="font-size:12px" id="tasks-count"></span>
+      </div>
+
+      <div class="table-card">
+        <div id="tasks-table-container">
+          <div class="empty-state"><i class="bi bi-check2-square"></i>Loading tasks…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Categories ─────────────────────────────────────────────────────── -->
+    <section id="view-categories" class="view">
+      <div class="page-header d-flex align-items-start justify-content-between">
+        <div>
+          <h1 class="page-title">Categories</h1>
+          <p class="page-subtitle">Organize tasks with color-coded categories</p>
+        </div>
+        <button class="btn btn-accent" onclick="openCategoryModal(null)">
+          <i class="bi bi-plus-lg"></i> New Category
+        </button>
+      </div>
+      <div class="row g-3" id="categories-grid">
+        <div class="col-12">
+          <div class="empty-state"><i class="bi bi-tags"></i>Loading categories…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── API Info ────────────────────────────────────────────────────────── -->
+    <section id="view-api" class="view">
+      <div class="page-header">
+        <h1 class="page-title">API Reference</h1>
+        <p class="page-subtitle">Endpoints available for the Flutter mobile app</p>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-12 col-lg-8">
+          <!-- Tasks endpoints -->
+          <h6 class="text-muted mb-3" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">Tasks</h6>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-get">GET</span>
+              <code>/api/tasks</code>
+              <span class="ms-auto text-muted" style="font-size:12px">List all tasks</span>
+            </div>
+            <div class="mt-2 text-muted" style="font-size:12px">
+              Query params: <code>date</code>, <code>status</code>, <code>mode</code>, <code>category_id</code>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-post">POST</span>
+              <code>/api/tasks</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Create a task</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-post">POST</span>
+              <code>/api/tasks/bulk</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Bulk upsert (sync from app)</span>
+            </div>
+            <div class="mt-2 text-muted" style="font-size:12px">
+              Accepts an array of tasks. Creates new ones and updates existing ones (by ID).
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-put">PUT</span>
+              <code>/api/tasks/{id}</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Update a task</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-delete">DELETE</span>
+              <code>/api/tasks/{id}</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Delete a task</span>
+            </div>
+          </div>
+
+          <h6 class="text-muted mb-3 mt-4" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">Categories</h6>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-get">GET</span>
+              <code>/api/categories</code>
+              <span class="ms-auto text-muted" style="font-size:12px">List categories</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-post">POST</span>
+              <code>/api/categories</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Create category</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-put">PUT</span>
+              <code>/api/categories/{id}</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Update category</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-delete">DELETE</span>
+              <code>/api/categories/{id}</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Delete category</span>
+            </div>
+          </div>
+
+          <h6 class="text-muted mb-3 mt-4" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">Stats</h6>
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-get">GET</span>
+              <code>/api/stats</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Task counts by status</span>
+            </div>
+          </div>
+
+          <div class="endpoint-card">
+            <div class="d-flex align-items-center gap-3">
+              <span class="method-badge method-get">GET</span>
+              <code>/docs</code>
+              <span class="ms-auto text-muted" style="font-size:12px">Interactive Swagger UI</span>
+            </div>
+            <div class="mt-2">
+              <a href="/docs" target="_blank" class="btn btn-sm btn-accent">
+                <i class="bi bi-box-arrow-up-right"></i> Open Swagger
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+          <div class="table-card p-4">
+            <h6 class="fw-bold mb-3">Flutter Integration</h6>
+            <p class="text-muted" style="font-size:12px">Add this to <code>pubspec.yaml</code>:</p>
+            <pre style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;font-size:12px;color:rgba(255,255,255,0.8)">dependencies:
+  http: ^1.2.2</pre>
+            <p class="text-muted mt-3" style="font-size:12px">Android emulator → server address:</p>
+            <pre style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;font-size:12px;color:rgba(255,255,255,0.8)">http://10.0.2.2:8000</pre>
+            <p class="text-muted mt-3" style="font-size:12px">Physical device (same WiFi):</p>
+            <pre style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;font-size:12px;color:rgba(255,255,255,0.8)">http://&lt;your-local-ip&gt;:8000</pre>
+            <p class="text-muted mt-3" style="font-size:12px">Run the server:</p>
+            <pre style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;font-size:12px;color:rgba(255,255,255,0.8)">cd backend
+pip install -r requirements.txt
+python main.py</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /main-wrap -->
+</div><!-- /d-flex -->
+
+<!-- ══ Toast notification ════════════════════════════════════════════════════ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="main-toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body fw-semibold" id="toast-body" style="font-size:13px"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Task modal ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="taskModalTitle">New Task</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="t-id">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Title *</label>
+            <input type="text" class="form-control" id="t-title" placeholder="e.g. Complete project report" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="t-desc" rows="2" placeholder="Optional description…"></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" id="t-date" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Start Time</label>
+            <input type="time" class="form-control" id="t-start">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">End Time</label>
+            <input type="time" class="form-control" id="t-end">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="t-status">
+              <option value="0">⏳ Pending</option>
+              <option value="1">🔄 In Progress</option>
+              <option value="2">✅ Completed</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Mode</label>
+            <select class="form-select" id="t-mode">
+              <option value="0">📅 Calendar</option>
+              <option value="1">⚡ Smart</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Category</label>
+            <select class="form-select" id="t-category">
+              <option value="">— None —</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-accent" onclick="saveTask()">
+          <i class="bi bi-floppy"></i> Save Task
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Category modal ════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="catModalTitle">New Category</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="c-id">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Name *</label>
+            <input type="text" class="form-control" id="c-name" placeholder="e.g. Work, Study, Health…" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Color</label>
+            <input type="color" class="form-control form-control-color w-100" id="c-color" value="#4A90E2">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Icon</label>
+            <select class="form-select" id="c-icon">
+              <option value="briefcase">💼 Work</option>
+              <option value="house">🏠 Home</option>
+              <option value="book">📚 Study</option>
+              <option value="heart-pulse">❤️ Health</option>
+              <option value="cart">🛒 Shopping</option>
+              <option value="piggy-bank">🐷 Finance</option>
+              <option value="star">⭐ Important</option>
+              <option value="person">👤 Personal</option>
+              <option value="code-slash">💻 Tech</option>
+              <option value="tag">🏷️ General</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-accent" onclick="saveCategory()">
+          <i class="bi bi-floppy"></i> Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Delete confirmation modal ═════════════════════════════════════════════ -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle"></i> Delete</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-0">
+        <p class="text-muted" style="font-size:13px" id="delete-msg">Are you sure you want to delete this item?</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn">
+          <i class="bi bi-trash"></i> Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  CONFIG & STATE
+// ══════════════════════════════════════════════════════════════════════════════
+const API_URL_KEY = 'ff_api_url';
+let apiBase = localStorage.getItem(API_URL_KEY) || 'http://localhost:8000';
+
+let allTasks = [];
+let allCategories = [];
+
+// Bootstrap modal instances
+const taskModal     = new bootstrap.Modal(document.getElementById('taskModal'));
+const categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+const deleteModal   = new bootstrap.Modal(document.getElementById('deleteModal'));
+const toastEl       = document.getElementById('main-toast');
+const bsToast       = new bootstrap.Toast(toastEl, { delay: 3000 });
+
+document.getElementById('api-url-input').value = apiBase;
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+async function apiFetch(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body !== null) opts.body = JSON.stringify(body);
+
+  const res = await fetch(apiBase + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function checkConnection() {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  try {
+    await apiFetch('/api/stats');
+    dot.className = 'online'; text.textContent = 'Connected';
+  } catch {
+    dot.className = 'offline'; text.textContent = 'Offline';
+  }
+}
+
+function applyApiUrl() {
+  const val = document.getElementById('api-url-input').value.trim();
+  if (val) {
+    apiBase = val.replace(/\/$/, '');
+    localStorage.setItem(API_URL_KEY, apiBase);
+    checkConnection();
+    loadCurrentView();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+let currentView = 'dashboard';
+
+function showView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.sidebar .nav-link').forEach(a => {
+    a.classList.toggle('active', a.dataset.view === view);
+  });
+  document.getElementById(`view-${view}`).classList.add('active');
+  currentView = view;
+  loadCurrentView();
+}
+
+function loadCurrentView() {
+  if (currentView === 'dashboard')  loadDashboard();
+  if (currentView === 'tasks')      loadTasks();
+  if (currentView === 'categories') loadCategories();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DATE / TIME HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+function isoToDate(iso) { return iso ? iso.substring(0, 10) : ''; }
+function isoToTime(iso) { return iso ? iso.substring(11, 16) : ''; }
+function toISO(dateVal, timeVal) {
+  if (!dateVal) return null;
+  return timeVal ? `${dateVal}T${timeVal}:00.000` : `${dateVal}T00:00:00.000`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATUS / MODE BADGES
+// ══════════════════════════════════════════════════════════════════════════════
+const STATUS_LABELS = ['Pending', 'In Progress', 'Completed'];
+const STATUS_CLASSES = ['badge-pending', 'badge-progress', 'badge-completed'];
+const MODE_LABELS = ['Calendar', 'Smart'];
+const MODE_CLASSES = ['badge-calendar', 'badge-smart'];
+
+function statusBadge(s) {
+  return `<span class="badge-status ${STATUS_CLASSES[s]}">${STATUS_LABELS[s]}</span>`;
+}
+function modeBadge(m) {
+  return `<span class="badge-status ${MODE_CLASSES[m]}">${MODE_LABELS[m]}</span>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════════════════════════
+function showToast(msg, success = true) {
+  document.getElementById('toast-body').textContent = msg;
+  toastEl.className = `toast align-items-center border-0 text-white bg-${success ? 'success' : 'danger'}`;
+  bsToast.show();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  try {
+    const stats = await apiFetch('/api/stats');
+    document.getElementById('stat-total').textContent     = stats.total;
+    document.getElementById('stat-pending').textContent   = stats.pending;
+    document.getElementById('stat-progress').textContent  = stats.in_progress;
+    document.getElementById('stat-completed').textContent = stats.completed;
+
+    const recent = await apiFetch('/api/tasks');
+    const slice  = recent.slice(-10).reverse();
+    const cont   = document.getElementById('recent-tasks-container');
+
+    if (!slice.length) {
+      cont.innerHTML = `<div class="empty-state"><i class="bi bi-inbox"></i>No tasks yet</div>`;
+      return;
+    }
+
+    cont.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead><tr>
+            <th>Title</th><th>Date</th><th>Status</th><th>Mode</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${slice.map(t => `
+              <tr>
+                <td class="fw-semibold">${escHtml(t.title)}</td>
+                <td style="white-space:nowrap">${fmtDate(t.date)}</td>
+                <td>${statusBadge(t.status)}</td>
+                <td>${modeBadge(t.mode)}</td>
+                <td>
+                  <button class="btn btn-action btn-sm" style="background:rgba(74,144,226,0.12);color:var(--accent)"
+                          onclick="showView('tasks')">
+                    <i class="bi bi-arrow-right"></i>
+                  </button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    document.getElementById('recent-tasks-container').innerHTML =
+      `<div class="empty-state text-danger"><i class="bi bi-wifi-off"></i>${e.message}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TASKS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadTasks() {
+  try {
+    allTasks = await apiFetch('/api/tasks');
+    await loadCategoriesData();
+    populateCategoryFilter();
+    renderTasksTable(allTasks);
+  } catch(e) {
+    document.getElementById('tasks-table-container').innerHTML =
+      `<div class="empty-state text-danger"><i class="bi bi-wifi-off"></i>${e.message}</div>`;
+  }
+}
+
+function applyTaskFilters() {
+  const status   = document.getElementById('filter-status').value;
+  const mode     = document.getElementById('filter-mode').value;
+  const catId    = document.getElementById('filter-category').value;
+  const date     = document.getElementById('filter-date').value;
+
+  const filtered = allTasks.filter(t => {
+    if (status !== '' && t.status !== parseInt(status)) return false;
+    if (mode   !== '' && t.mode   !== parseInt(mode))   return false;
+    if (catId  !== '' && String(t.category_id) !== catId) return false;
+    if (date   !== '' && !t.date.startsWith(date))       return false;
+    return true;
+  });
+  renderTasksTable(filtered);
+}
+
+function clearTaskFilters() {
+  ['filter-status','filter-mode','filter-category','filter-date'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  renderTasksTable(allTasks);
+}
+
+function populateCategoryFilter() {
+  const sel = document.getElementById('filter-category');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All categories</option>' +
+    allCategories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  sel.value = cur;
+}
+
+function renderTasksTable(tasks) {
+  document.getElementById('tasks-count').textContent = `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`;
+  const cont = document.getElementById('tasks-table-container');
+
+  if (!tasks.length) {
+    cont.innerHTML = `<div class="empty-state"><i class="bi bi-check2-square"></i>No tasks found</div>`;
+    return;
+  }
+
+  const catMap = Object.fromEntries(allCategories.map(c => [c.id, c]));
+
+  cont.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead><tr>
+          <th>Title</th><th>Date</th><th>Time</th><th>Status</th><th>Mode</th><th>Category</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${tasks.map(t => {
+            const cat = t.category_id ? catMap[t.category_id] : null;
+            const catBadge = cat
+              ? `<span class="badge-cat" style="background:${cat.color}22;color:${cat.color}">${escHtml(cat.name)}</span>`
+              : '<span class="text-muted" style="font-size:12px">—</span>';
+            const timeStr = t.start_time
+              ? `${fmtTime(t.start_time)} – ${t.end_time ? fmtTime(t.end_time) : '?'}`
+              : '—';
+            return `
+              <tr>
+                <td class="fw-semibold" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  ${escHtml(t.title)}
+                  ${t.is_carried_over ? '<span class="badge bg-warning text-dark ms-1" style="font-size:9px">CARRY</span>' : ''}
+                  ${t.is_recurring_parent ? '<span class="badge bg-secondary ms-1" style="font-size:9px">REC</span>' : ''}
+                </td>
+                <td style="white-space:nowrap">${fmtDate(t.date)}</td>
+                <td style="white-space:nowrap;font-size:12px;color:rgba(255,255,255,0.5)">${timeStr}</td>
+                <td>${statusBadge(t.status)}</td>
+                <td>${modeBadge(t.mode)}</td>
+                <td>${catBadge}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-action btn-sm me-1"
+                          style="background:rgba(74,144,226,0.12);color:var(--accent)"
+                          onclick='openTaskModal(${JSON.stringify(t)})'>
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-action btn-sm"
+                          style="background:rgba(239,68,68,0.12);color:#EF4444"
+                          onclick="confirmDelete('task', '${t.id}', '${escHtml(t.title).replace(/'/g,"\\'")}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ── Task CRUD ────────────────────────────────────────────────────────────────
+
+function openTaskModal(task) {
+  document.getElementById('taskModalTitle').textContent = task ? 'Edit Task' : 'New Task';
+
+  // Populate category options
+  const sel = document.getElementById('t-category');
+  sel.innerHTML = '<option value="">— None —</option>' +
+    allCategories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+
+  if (task) {
+    document.getElementById('t-id').value       = task.id;
+    document.getElementById('t-title').value    = task.title;
+    document.getElementById('t-desc').value     = task.description || '';
+    document.getElementById('t-date').value     = isoToDate(task.date);
+    document.getElementById('t-start').value    = isoToTime(task.start_time);
+    document.getElementById('t-end').value      = isoToTime(task.end_time);
+    document.getElementById('t-status').value   = task.status;
+    document.getElementById('t-mode').value     = task.mode;
+    document.getElementById('t-category').value = task.category_id || '';
+  } else {
+    document.getElementById('t-id').value       = '';
+    document.getElementById('t-title').value    = '';
+    document.getElementById('t-desc').value     = '';
+    document.getElementById('t-date').value     = new Date().toISOString().substring(0, 10);
+    document.getElementById('t-start').value    = '';
+    document.getElementById('t-end').value      = '';
+    document.getElementById('t-status').value   = '0';
+    document.getElementById('t-mode').value     = '0';
+    document.getElementById('t-category').value = '';
+  }
+
+  taskModal.show();
+}
+
+async function saveTask() {
+  const title = document.getElementById('t-title').value.trim();
+  const date  = document.getElementById('t-date').value;
+  if (!title || !date) { showToast('Title and date are required', false); return; }
+
+  const existingId = document.getElementById('t-id').value;
+  const catVal     = document.getElementById('t-category').value;
+
+  const payload = {
+    title,
+    description:  document.getElementById('t-desc').value.trim(),
+    date:         toISO(date, null),
+    start_time:   toISO(date, document.getElementById('t-start').value) || null,
+    end_time:     toISO(date, document.getElementById('t-end').value)   || null,
+    status:       parseInt(document.getElementById('t-status').value),
+    mode:         parseInt(document.getElementById('t-mode').value),
+    category_id:  catVal ? parseInt(catVal) : null,
+    is_carried_over:    false,
+    day_order:          0,
+    is_recurring_parent: false,
+  };
+
+  try {
+    if (existingId) {
+      await apiFetch(`/api/tasks/${existingId}`, 'PUT', payload);
+      showToast('Task updated');
+    } else {
+      payload.id = crypto.randomUUID();
+      await apiFetch('/api/tasks', 'POST', payload);
+      showToast('Task created');
+    }
+    taskModal.hide();
+    loadTasks();
+  } catch(e) {
+    showToast(e.message, false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CATEGORIES
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadCategoriesData() {
+  allCategories = await apiFetch('/api/categories');
+}
+
+async function loadCategories() {
+  try {
+    await loadCategoriesData();
+    renderCategoriesGrid();
+  } catch(e) {
+    document.getElementById('categories-grid').innerHTML =
+      `<div class="col-12"><div class="empty-state text-danger"><i class="bi bi-wifi-off"></i>${e.message}</div></div>`;
+  }
+}
+
+const ICON_EMOJI = {
+  'briefcase':'💼','house':'🏠','book':'📚','heart-pulse':'❤️','cart':'🛒',
+  'piggy-bank':'🐷','star':'⭐','person':'👤','code-slash':'💻','tag':'🏷️'
+};
+
+function renderCategoriesGrid() {
+  const grid = document.getElementById('categories-grid');
+  if (!allCategories.length) {
+    grid.innerHTML = `<div class="col-12"><div class="empty-state"><i class="bi bi-tags"></i>No categories yet. Create one!</div></div>`;
+    return;
+  }
+  grid.innerHTML = allCategories.map(c => `
+    <div class="col-6 col-md-4 col-lg-3">
+      <div class="cat-card">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="cat-icon" style="background:${c.color}22;color:${c.color}">
+            ${ICON_EMOJI[c.icon] || '🏷️'}
+          </div>
+          <div>
+            <div class="fw-bold" style="font-size:15px">${escHtml(c.name)}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4)">
+              ${allTasks.filter(t => t.category_id === c.id).length} tasks
+            </div>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div style="width:14px;height:14px;border-radius:4px;background:${c.color};flex-shrink:0"></div>
+          <span style="font-size:11px;color:rgba(255,255,255,0.4)">${c.color}</span>
+          <div class="ms-auto d-flex gap-1">
+            <button class="btn btn-action btn-sm"
+                    style="background:rgba(74,144,226,0.12);color:var(--accent)"
+                    onclick='openCategoryModal(${JSON.stringify(c)})'>
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-action btn-sm"
+                    style="background:rgba(239,68,68,0.12);color:#EF4444"
+                    onclick="confirmDelete('category', ${c.id}, '${escHtml(c.name).replace(/'/g,"\\'")}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function openCategoryModal(cat) {
+  document.getElementById('catModalTitle').textContent = cat ? 'Edit Category' : 'New Category';
+  document.getElementById('c-id').value    = cat ? cat.id : '';
+  document.getElementById('c-name').value  = cat ? cat.name : '';
+  document.getElementById('c-color').value = cat ? cat.color : '#4A90E2';
+  document.getElementById('c-icon').value  = cat ? cat.icon : 'tag';
+  categoryModal.show();
+}
+
+async function saveCategory() {
+  const name = document.getElementById('c-name').value.trim();
+  if (!name) { showToast('Name is required', false); return; }
+
+  const payload = {
+    name,
+    color: document.getElementById('c-color').value,
+    icon:  document.getElementById('c-icon').value,
+  };
+
+  const id = document.getElementById('c-id').value;
+  try {
+    if (id) {
+      await apiFetch(`/api/categories/${id}`, 'PUT', payload);
+      showToast('Category updated');
+    } else {
+      await apiFetch('/api/categories', 'POST', payload);
+      showToast('Category created');
+    }
+    categoryModal.hide();
+    loadCategories();
+  } catch(e) {
+    showToast(e.message, false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DELETE
+// ══════════════════════════════════════════════════════════════════════════════
+function confirmDelete(type, id, name) {
+  document.getElementById('delete-msg').textContent =
+    `Delete "${name}"? This action cannot be undone.`;
+
+  const btn = document.getElementById('confirm-delete-btn');
+  btn.onclick = async () => {
+    try {
+      const path = type === 'task' ? `/api/tasks/${id}` : `/api/categories/${id}`;
+      await apiFetch(path, 'DELETE');
+      showToast(`${type === 'task' ? 'Task' : 'Category'} deleted`);
+      deleteModal.hide();
+      type === 'task' ? loadTasks() : loadCategories();
+    } catch(e) {
+      showToast(e.message, false);
+    }
+  };
+  deleteModal.show();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════════════════════════════
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════════════════════
+checkConnection();
+loadDashboard();
+setInterval(checkConnection, 30000);
+</script>
+</body>
+</html>

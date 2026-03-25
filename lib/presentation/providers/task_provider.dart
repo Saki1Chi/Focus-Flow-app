@@ -6,6 +6,7 @@ import '../../data/repositories/task_repository.dart';
 import '../../services/alarm_service.dart';
 import '../../services/app_blocker_service.dart';
 import '../../services/scheduler_service.dart';
+import '../../services/api_service.dart';
 import 'settings_provider.dart';
 
 final _uuid = Uuid();
@@ -259,6 +260,16 @@ class TaskNotifier extends StateNotifier<List<Task>> {
   // ─── Active block session ─────────────────────────────────────
 
   BlockSession? getActiveSession() => _repo.getActiveSession();
+
+  // ─── CMS sync ─────────────────────────────────────────────────
+
+  /// Pushes all local tasks to the CMS backend via a bulk upsert.
+  /// Returns a map with 'created' and 'updated' counts on success.
+  /// Throws an [Exception] if the server is unreachable or returns an error.
+  Future<Map<String, int>> syncWithServer() async {
+    final api = ApiService();
+    return api.bulkSync(state);
+  }
 }
 
 final taskProvider = StateNotifierProvider<TaskNotifier, List<Task>>(

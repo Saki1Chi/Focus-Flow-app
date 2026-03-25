@@ -37,7 +37,9 @@ class FocusFlowApp extends ConsumerWidget {
       theme: AppTheme.lightTheme(accent),
       darkTheme: AppTheme.darkTheme(accent),
       themeMode: settings.darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: settings.onboardingDone ? const AppShell() : const OnboardingScreen(),
+      home: settings.onboardingDone
+          ? const AppShell()
+          : const OnboardingScreen(),
     );
   }
 }
