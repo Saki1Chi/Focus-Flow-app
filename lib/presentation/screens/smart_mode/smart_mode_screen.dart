@@ -54,6 +54,7 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
   @override
   Widget build(BuildContext context) {
     final accent = ref.watch(settingsProvider).accentColor;
+    final tokens = Theme.of(context).extension<MinimalTheme>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -75,19 +76,36 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
           ],
         ),
       ),
-      body: _scheduledPreview != null
-          ? _buildPreview(accent, isDark)
-          : _buildForm(accent, isDark),
+      // AnimatedSwitcher para la transición form ↔ preview
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 380),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.04),
+              end: Offset.zero,
+            ).animate(anim),
+            child: child,
+          ),
+        ),
+        child: _scheduledPreview != null
+            ? _buildPreview(accent, isDark, key: const ValueKey('preview'))
+            : _buildForm(accent, isDark, key: const ValueKey('form')),
+      ),
     );
   }
 
-  Widget _buildForm(Color accent, bool isDark) {
-    final cardBg = isDark ? const Color(0xFF0E0E1C) : Colors.white;
-    final border = isDark
-        ? Colors.white.withValues(alpha: 0.07)
-        : Colors.black.withValues(alpha: 0.06);
+  Widget _buildForm(Color accent, bool isDark, {Key? key}) {
+    final tokens = Theme.of(context).extension<MinimalTheme>();
+    final cardBg = tokens?.surface ?? (isDark ? const Color(0xFF0E0E1C) : Colors.white);
+    final border = tokens?.border ??
+        (isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.06));
 
     return ListView(
+      key: key,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: [
@@ -108,7 +126,6 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
               borderRadius: BorderRadius.circular(16),
               border:
                   Border.all(color: accent.withValues(alpha: 0.20), width: 1),
-              boxShadow: isDark ? NeonColors.softGlow(accent) : null,
             ),
             child: Row(
               children: [
@@ -141,7 +158,7 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
         FadeInDown(
           duration: const Duration(milliseconds: 400),
           delay: const Duration(milliseconds: 60),
-          child: GestureDetector(
+          child: _AnimatedTapContainer(
             onTap: _pickDate,
             child: Container(
               padding:
@@ -150,7 +167,6 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
                 color: cardBg,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: border, width: 1),
-                boxShadow: isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
               ),
               child: Row(
                 children: [
@@ -205,10 +221,16 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
               Text('Tasks to schedule',
                   style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
-              Text(
-                '${_inputs.length}',
-                style: TextStyle(
-                    color: accent, fontWeight: FontWeight.w700, fontSize: 13),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: Text(
+                  key: ValueKey(_inputs.length),
+                  '${_inputs.length}',
+                  style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13),
+                ),
               ),
             ],
           ),
@@ -226,7 +248,7 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
         ),
 
         // ── Add another ─────────────────────────────────
-        GestureDetector(
+        _AnimatedTapContainer(
           onTap: _addInput,
           child: Container(
             margin: const EdgeInsets.only(bottom: 14),
@@ -254,26 +276,12 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
           ),
         ),
 
-        // ── Schedule button ─────────────────────────────
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: isDark ? NeonColors.glow(accent, intensity: 0.75) : null,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: _loading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.auto_awesome_rounded, size: 17),
-              label: const Text('Auto-Schedule'),
-              onPressed: _loading ? null : _schedule,
-            ),
-          ),
+        // ── Schedule button con glow pulsante ───────────
+        _PulsingScheduleButton(
+          accent: accent,
+          isDark: isDark,
+          loading: _loading,
+          onPressed: _loading ? null : _schedule,
         ),
         const SizedBox(height: 100),
       ],
@@ -288,7 +296,6 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: border, width: 1),
-        boxShadow: isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -368,8 +375,9 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
     );
   }
 
-  Widget _buildPreview(Color accent, bool isDark) {
+  Widget _buildPreview(Color accent, bool isDark, {Key? key}) {
     return Column(
+      key: key,
       children: [
         FadeInDown(
           duration: const Duration(milliseconds: 380),
@@ -387,9 +395,6 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
               border: Border.all(
                   color: const Color(0xFF22C55E).withValues(alpha: 0.25),
                   width: 1),
-              boxShadow: isDark
-                  ? NeonColors.softGlow(const Color(0xFF22C55E))
-                  : null,
             ),
             child: Row(
               children: [
@@ -441,21 +446,24 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => setState(() => _scheduledPreview = null),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: accent,
-                side: BorderSide(
+          child: _AnimatedTapContainer(
+            onTap: () => setState(() => _scheduledPreview = null),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
                     color: accent.withValues(alpha: 0.45), width: 1.5),
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
               ),
-              child: Text('Schedule More',
+              child: Center(
+                child: Text(
+                  'Schedule More',
                   style: TextStyle(
-                      color: accent, fontWeight: FontWeight.w700)),
+                      color: accent, fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
             ),
           ),
         ),
@@ -505,5 +513,141 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
             .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+}
+
+// ── Botón Auto-Schedule con glow pulsante ──────────────────────
+
+class _PulsingScheduleButton extends StatefulWidget {
+  final Color accent;
+  final bool isDark;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  const _PulsingScheduleButton({
+    required this.accent,
+    required this.isDark,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  State<_PulsingScheduleButton> createState() => _PulsingScheduleButtonState();
+}
+
+class _PulsingScheduleButtonState extends State<_PulsingScheduleButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _glow;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _glow = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _glow,
+      builder: (_, child) => Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: widget.isDark && !widget.loading
+              ? [
+                  BoxShadow(
+                    color: widget.accent.withValues(
+                        alpha: 0.45 * _glow.value),
+                    blurRadius: 20 + (8 * _glow.value),
+                    spreadRadius: -4,
+                  ),
+                ]
+              : null,
+        ),
+        child: child,
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          icon: widget.loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.auto_awesome_rounded, size: 17),
+          label: const Text('Auto-Schedule'),
+          onPressed: widget.onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Contenedor con animación de tap genérico ───────────────────
+
+class _AnimatedTapContainer extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _AnimatedTapContainer({
+    required this.child,
+    required this.onTap,
+  });
+
+  @override
+  State<_AnimatedTapContainer> createState() => _AnimatedTapContainerState();
+}
+
+class _AnimatedTapContainerState extends State<_AnimatedTapContainer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 160),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: widget.child,
+      ),
+    );
   }
 }

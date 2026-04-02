@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# FocusGuard
+focusguard/data/*.log*
+focusguard/data/*.bak
+focusguard/__pycache__/
+focusguard/src/__pycache__/
+
+# Backend
+backend/__pycache__/
+backend/routers/__pycache__/
+backend/*.db

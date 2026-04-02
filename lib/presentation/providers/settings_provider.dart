@@ -8,6 +8,7 @@ class SettingsState {
   final int alertDelayMinutes;
   final String defaultMode; // 'calendar' or 'smart'
   final String accentColorKey;
+  final String? customAccentHex;
   final bool darkMode;
   final bool onboardingDone;
   final int completedBlocks;
@@ -18,19 +19,28 @@ class SettingsState {
     this.alertDelayMinutes = AppConstants.defaultAlertDelay,
     this.defaultMode = 'calendar',
     this.accentColorKey = AppConstants.defaultAccentColor,
+    this.customAccentHex,
     this.darkMode = false,
     this.onboardingDone = false,
     this.completedBlocks = 0,
     this.blockedApps = const [],
   });
 
-  Color get accentColor => AppConstants.accentColors[accentColorKey] ?? AppConstants.accentColors['blue']!;
+  Color get accentColor {
+    if (accentColorKey == 'custom' && customAccentHex != null) {
+      var hex = customAccentHex!.replaceFirst('0x', '').replaceFirst('#', '');
+      if (hex.length == 6) hex = 'FF$hex';
+      return Color(int.parse(hex, radix: 16));
+    }
+    return AppConstants.accentColors[accentColorKey] ?? AppConstants.accentColors['blue']!;
+  }
 
   SettingsState copyWith({
     int? unlockDuration,
     int? alertDelayMinutes,
     String? defaultMode,
     String? accentColorKey,
+    String? customAccentHex,
     bool? darkMode,
     bool? onboardingDone,
     int? completedBlocks,
@@ -41,6 +51,7 @@ class SettingsState {
         alertDelayMinutes: alertDelayMinutes ?? this.alertDelayMinutes,
         defaultMode: defaultMode ?? this.defaultMode,
         accentColorKey: accentColorKey ?? this.accentColorKey,
+        customAccentHex: customAccentHex ?? this.customAccentHex,
         darkMode: darkMode ?? this.darkMode,
         onboardingDone: onboardingDone ?? this.onboardingDone,
         completedBlocks: completedBlocks ?? this.completedBlocks,
@@ -61,6 +72,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       alertDelayMinutes: _box.get(AppConstants.keyAlertDelay, defaultValue: AppConstants.defaultAlertDelay),
       defaultMode: _box.get(AppConstants.keyDefaultMode, defaultValue: 'calendar'),
       accentColorKey: _box.get(AppConstants.keyAccentColor, defaultValue: AppConstants.defaultAccentColor),
+      customAccentHex: _box.get(AppConstants.keyCustomAccent) as String?,
       darkMode: _box.get(AppConstants.keyDarkMode, defaultValue: false),
       onboardingDone: _box.get(AppConstants.keyOnboardingDone, defaultValue: false),
       completedBlocks: _box.get(AppConstants.keyCompletedBlocks, defaultValue: 0),
@@ -86,6 +98,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<void> setAccentColor(String key) async {
     await _box.put(AppConstants.keyAccentColor, key);
     state = state.copyWith(accentColorKey: key);
+  }
+
+  Future<void> setCustomAccent(String hex) async {
+    await _box.put(AppConstants.keyCustomAccent, hex);
+    state = state.copyWith(customAccentHex: hex, accentColorKey: 'custom');
   }
 
   Future<void> setDarkMode(bool value) async {

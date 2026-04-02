@@ -1,5 +1,6 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
@@ -238,6 +239,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: _SyncTile(accent: accent, isDark: isDark),
               ),
 
+              FadeInDown(
+                delay: const Duration(milliseconds: 200),
+                child: _PullTile(accent: accent, isDark: isDark),
+              ),
+
               const SizedBox(height: 120),
             ]),
           ),
@@ -363,7 +369,7 @@ class _Divider extends StatelessWidget {
 
 // ── Neon tile ──────────────────────────────────────────────────
 
-class _NeonTile extends StatelessWidget {
+class _NeonTile extends StatefulWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -383,48 +389,88 @@ class _NeonTile extends StatelessWidget {
   });
 
   @override
+  State<_NeonTile> createState() => _NeonTileState();
+}
+
+class _NeonTileState extends State<_NeonTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bg     = isDark ? const Color(0xFF0E0E1C) : Colors.white;
-    final border = isDark
+    final bg     = widget.isDark ? const Color(0xFF0E0E1C) : Colors.white;
+    final border = widget.isDark
         ? Colors.white.withValues(alpha: 0.07)
         : Colors.black.withValues(alpha: 0.06);
 
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: border, width: 1),
-          boxShadow: isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
+      onTapDown: widget.onTap != null ? (_) => _ctrl.forward() : null,
+      onTapUp: widget.onTap != null
+          ? (_) {
+              _ctrl.reverse();
+              widget.onTap!();
+            }
+          : null,
+      onTapCancel: widget.onTap != null ? () => _ctrl.reverse() : null,
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: border, width: 1),
+            boxShadow:
+                widget.isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(widget.icon, color: widget.accent, size: 18),
               ),
-              child: Icon(icon, color: accent, size: 18),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.title,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(widget.subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
               ),
-            ),
-            trailing,
-          ],
+              widget.trailing,
+            ],
+          ),
         ),
       ),
     );
@@ -666,6 +712,11 @@ class _AccentColorTile extends StatelessWidget {
     final border = isDark
         ? Colors.white.withValues(alpha: 0.07)
         : Colors.black.withValues(alpha: 0.06);
+    final customHex = settings.customAccentHex ??
+        settings.accentColor.value.toRadixString(16).padLeft(8, '0').toUpperCase();
+    final presets = AppConstants.accentColors.entries
+        .where((e) => e.key != 'custom')
+        .toList();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -694,36 +745,153 @@ class _AccentColorTile extends StatelessWidget {
             Text('Accent Color',
                 style: Theme.of(context).textTheme.titleMedium),
           ]),
-          const SizedBox(height: 16),
-          Row(
-            children: AppConstants.accentColors.entries.map((entry) {
-              final isSelected = settings.accentColorKey == entry.key;
-              return GestureDetector(
-                onTap: () => notifier.setAccentColor(entry.key),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  margin: const EdgeInsets.only(right: 12),
-                  width: isSelected ? 40 : 36,
-                  height: isSelected ? 40 : 36,
-                  decoration: BoxDecoration(
-                    color: entry.value,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? Colors.white : Colors.transparent,
-                      width: 2.5,
+            const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ...presets.map((entry) {
+                final isSelected = settings.accentColorKey == entry.key;
+                return GestureDetector(
+                  onTap: () => notifier.setAccentColor(entry.key),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: isSelected ? 44 : 38,
+                    height: isSelected ? 44 : 38,
+                    decoration: BoxDecoration(
+                      color: entry.value,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? Colors.white : Colors.transparent,
+                        width: 2,
+                      ),
                     ),
-                    boxShadow: isSelected
-                        ? NeonColors.glow(entry.value, intensity: 1.2)
+                    child: isSelected
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 18)
                         : null,
                   ),
-                  child: isSelected
-                      ? const Icon(Icons.check_rounded,
-                          color: Colors.white, size: 18)
-                      : null,
+                );
+              }),
+              GestureDetector(
+                onTap: () async {
+                  Color temp = settings.accentColor;
+                  final controller = TextEditingController(text: '#${customHex.substring(2)}');
+                  await showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                    builder: (ctx) {
+                      return StatefulBuilder(
+                        builder: (ctx, setSheetState) {
+                          void updateFromColor(Color c) {
+                            temp = c;
+                            final hex = c.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                            controller.value = TextEditingValue(
+                              text: '#$hex',
+                              selection: TextSelection.collapsed(offset: hex.length + 1),
+                            );
+                            setSheetState(() {});
+                          }
+
+                          void updateFromText(String v) {
+                            final cleaned = v.replaceAll('#', '').replaceAll('0x', '');
+                            if (cleaned.length == 6 || cleaned.length == 8) {
+                              temp = Color(int.parse(
+                                  cleaned.length == 6 ? 'FF$cleaned' : cleaned,
+                                  radix: 16));
+                              setSheetState(() {});
+                            }
+                          }
+
+                          return SafeArea(
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.only(
+                                left: 16,
+                                right: 16,
+                                top: 18,
+                                bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Custom accent color',
+                                      style: Theme.of(context).textTheme.titleMedium),
+                                  const SizedBox(height: 14),
+                                  SizedBox(
+                                    height: 240,
+                                    child: ColorPicker(
+                                      pickerColor: temp,
+                                      onColorChanged: updateFromColor,
+                                      paletteType: PaletteType.hsvWithHue,
+                                      enableAlpha: false,
+                                      labelTypes: const [],
+                                      portraitOnly: true,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: controller,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Hex color (e.g. #3B82F6)',
+                                    ),
+                                    onChanged: updateFromText,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('Cancel')),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          final hex = controller.text.replaceAll('#', '').replaceAll('0x', '');
+                                          if (hex.isEmpty) return;
+                                          final saveHex = hex.length == 6 ? 'FF$hex' : hex;
+                                          await notifier.setCustomAccent(saveHex);
+                                          Navigator.pop(ctx);
+                                        },
+                                        child: const Text('Use'),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: settings.accentColorKey == 'custom'
+                        ? settings.accentColor
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: settings.accentColorKey == 'custom'
+                          ? Colors.white
+                          : Theme.of(context).dividerColor,
+                      width: 2,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.add_rounded,
+                    color: settings.accentColorKey == 'custom'
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
-              );
-            }).toList(),
+              ),
+            ],
           ),
         ],
       ),
@@ -811,9 +979,155 @@ class _SyncTile extends ConsumerStatefulWidget {
   final bool isDark;
   const _SyncTile({required this.accent, required this.isDark});
 
-  @override
+  @override // otro cambio
   ConsumerState<_SyncTile> createState() => _SyncTileState();
 }
+
+// ─── Pull tile ──────────────────────────────────────────────────────
+//otro cambio
+class _PullTile extends ConsumerStatefulWidget {
+  final Color accent;
+  final bool isDark;
+  const _PullTile({required this.accent, required this.isDark});
+
+  @override
+  ConsumerState<_PullTile> createState() => _PullTileState();
+}
+
+class _PullTileState extends ConsumerState<_PullTile> {
+  bool _loading = false;
+  String? _lastResult;
+
+  Future<void> _pull() async {
+    setState(() { _loading = true; _lastResult = null; });
+    try {
+      await ref.read(taskProvider.notifier).refreshFromServer();
+      setState(() => _lastResult = 'Tareas descargadas del panel');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sincronizado con el panel')),
+        );
+      }
+    } catch (e) {
+      setState(() => _lastResult = 'Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al sincronizar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg     = widget.isDark ? const Color(0xFF0E0E1C) : Colors.white;
+    final border = widget.isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.06);
+    final subColor = widget.isDark ? const Color(0xFF484862) : const Color(0xFF9898B8);
+    final taskCount = ref.watch(taskProvider).length;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border, width: 1),
+        boxShadow: widget.isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.download_rounded, color: widget.accent, size: 18),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pull from Server',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Descarga tareas del panel y reemplaza las locales ($taskCount actuales)',
+                      style: TextStyle(fontSize: 11, color: subColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_lastResult != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _lastResult!.startsWith('Error')
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.10)
+                    : const Color(0xFF22C55E).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _lastResult!.startsWith('Error')
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.25)
+                      : const Color(0xFF22C55E).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Text(
+                _lastResult!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _lastResult!.startsWith('Error')
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFF22C55E),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _loading ? null : _pull,
+              icon: _loading
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: widget.accent,
+                      ),
+                    )
+                  : const Icon(Icons.download_outlined, size: 16),
+              label: Text(_loading ? 'Cargando…' : 'Traer tareas'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.accent.withValues(alpha: 0.12),
+                foregroundColor: widget.accent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                side: BorderSide(color: widget.accent.withValues(alpha: 0.25)),
+                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+} // aqui termina el cambio
+
 
 class _SyncTileState extends ConsumerState<_SyncTile> {
   bool _syncing = false;

@@ -14,6 +14,7 @@ final _uuid = Uuid();
 class TaskNotifier extends StateNotifier<List<Task>> {
   TaskNotifier(this._ref) : super([]) {
     _load();
+    _pullFromServer(); // SEGUNDO CAMBIO
   }
 
   final Ref _ref;
@@ -37,7 +38,33 @@ class TaskNotifier extends StateNotifier<List<Task>> {
       ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
   }
 
+    // TERCER CAMBIO
+    Future<void> _pullFromServer() async {
+    try {
+      await refreshFromServer();
+    } catch (_) {
+      // Silencia en arranque; puedes loguear si quieres.
+    }
+  }
+
+
   // ─── CRUD ─────────────────────────────────────────────────────
+
+  // CUARTO CAMBIO
+  Future<void> refreshFromServer() async {
+    final api = ApiService();
+    final remote = await api.getTasks();
+    await _repo.replaceAll(remote);
+    state = remote;
+    // Opcional: reprogramar alarmas para pendientes con hora
+    final settings = _ref.read(settingsProvider);
+    for (final t in remote) {
+      if (t.startTime != null && t.status == TaskStatus.pending) {
+        await _alarm.scheduleTaskAlert(t, settings.alertDelayMinutes);
+      }
+    }
+  }
+
 
   Future<Task> addTask({
     required String title,

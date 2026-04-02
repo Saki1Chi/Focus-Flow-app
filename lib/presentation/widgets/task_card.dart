@@ -47,7 +47,7 @@ class _TaskCardState extends ConsumerState<TaskCard>
   }
 
   @override
-  Widget build(BuildContext context, ) {
+  Widget build(BuildContext context) {
     final accent      = ref.watch(settingsProvider).accentColor;
     final isDark      = Theme.of(context).brightness == Brightness.dark;
     final textTheme   = Theme.of(context).textTheme;
@@ -101,7 +101,7 @@ class _TaskCardState extends ConsumerState<TaskCard>
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Left accent strip (only for in-progress) ──
+                  // ── Left accent strip animada (in-progress) ──
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 280),
                     curve: Curves.easeOutCubic,
@@ -241,9 +241,9 @@ class _TaskCardState extends ConsumerState<TaskCard>
   }
 }
 
-// ── Status dot ─────────────────────────────────────────────────
+// ── Status dot con pulso para in-progress ──────────────────────
 
-class _StatusDot extends StatelessWidget {
+class _StatusDot extends StatefulWidget {
   final Task task;
   final Color accent;
   final bool isDark;
@@ -251,25 +251,91 @@ class _StatusDot extends StatelessWidget {
       {required this.task, required this.accent, required this.isDark});
 
   @override
+  State<_StatusDot> createState() => _StatusDotState();
+}
+
+class _StatusDotState extends State<_StatusDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    _pulse = Tween<double>(begin: 0.88, end: 1.14).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+    if (widget.task.status == TaskStatus.inProgress) {
+      _ctrl.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_StatusDot old) {
+    super.didUpdateWidget(old);
+    if (widget.task.status == TaskStatus.inProgress && !_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    } else if (widget.task.status != TaskStatus.inProgress && _ctrl.isAnimating) {
+      _ctrl.stop();
+      _ctrl.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     Color color;
     IconData icon;
 
-    switch (task.status) {
+    switch (widget.task.status) {
       case TaskStatus.completed:
         color = const Color(0xFF22C55E);
         icon  = Icons.check_circle_rounded;
         break;
       case TaskStatus.inProgress:
-        color = accent;
+        color = widget.accent;
         icon  = Icons.play_circle_rounded;
         break;
       case TaskStatus.pending:
-        color = isDark
+        color = widget.isDark
             ? Colors.white.withValues(alpha: 0.20)
             : Colors.black.withValues(alpha: 0.20);
         icon  = Icons.circle_outlined;
         break;
+    }
+
+    if (widget.task.status == TaskStatus.inProgress) {
+      return AnimatedBuilder(
+        animation: _pulse,
+        builder: (_, child) => Transform.scale(
+          scale: _pulse.value,
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(
+                      alpha: 0.50 * ((_pulse.value - 0.88) / 0.26)),
+                  blurRadius: 12,
+                  spreadRadius: -2,
+                ),
+              ],
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+        ),
+      );
     }
 
     return Container(
@@ -277,7 +343,7 @@ class _StatusDot extends StatelessWidget {
       height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        boxShadow: task.status != TaskStatus.pending
+        boxShadow: widget.task.status != TaskStatus.pending
             ? NeonColors.glow(color, intensity: 0.65)
             : null,
       ),
@@ -328,7 +394,7 @@ class _ActionButtons extends ConsumerWidget {
     if (task.status == TaskStatus.completed) {
       return Row(children: [
         const Spacer(),
-        _chip(
+        _AnimatedChip(
           label: 'Undo',
           icon: Icons.undo_rounded,
           color: isDark
@@ -344,7 +410,7 @@ class _ActionButtons extends ConsumerWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         if (task.status == TaskStatus.pending)
-          _chip(
+          _AnimatedChip(
             label: 'Start',
             icon: Icons.play_arrow_rounded,
             color: accent,
@@ -352,7 +418,7 @@ class _ActionButtons extends ConsumerWidget {
             isDark: isDark,
           ),
         if (task.status == TaskStatus.inProgress) ...[
-          _chip(
+          _AnimatedChip(
             label: 'Done',
             icon: Icons.check_rounded,
             color: const Color(0xFF22C55E),
@@ -360,7 +426,7 @@ class _ActionButtons extends ConsumerWidget {
             isDark: isDark,
           ),
           const SizedBox(width: 8),
-          _chip(
+          _AnimatedChip(
             label: 'Pause',
             icon: Icons.pause_rounded,
             color: Colors.orange,
@@ -371,38 +437,90 @@ class _ActionButtons extends ConsumerWidget {
       ],
     );
   }
+}
 
-  Widget _chip({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
+// ── Chip con animación de press propia ─────────────────────────
+
+class _AnimatedChip extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _AnimatedChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  State<_AnimatedChip> createState() => _AnimatedChipState();
+}
+
+class _AnimatedChipState extends State<_AnimatedChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.90).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.24), width: 1),
-          boxShadow: isDark ? NeonColors.glow(color, intensity: 0.28) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2),
-            ),
-          ],
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+            border:
+                Border.all(color: widget.color.withValues(alpha: 0.24), width: 1),
+            boxShadow: widget.isDark
+                ? NeonColors.glow(widget.color, intensity: 0.28)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 13, color: widget.color),
+              const SizedBox(width: 4),
+              Text(
+                widget.label,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: widget.color,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -5,7 +5,8 @@ import '../../core/constants/app_constants.dart';
 
 class TaskRepository {
   Box<String> get _tasksBox => Hive.box<String>(AppConstants.tasksBox);
-  Box<String> get _sessionsBox => Hive.box<String>(AppConstants.blockSessionsBox);
+  Box<String> get _sessionsBox =>
+      Hive.box<String>(AppConstants.blockSessionsBox);
 
   // ─── Tasks ───────────────────────────────────────────────────
 
@@ -24,9 +25,7 @@ class TaskRepository {
 
   List<Task> getTasksForDate(DateTime date) {
     final d = _dateOnly(date);
-    return getAllTasks()
-        .where((t) => _dateOnly(t.date) == d)
-        .toList()
+    return getAllTasks().where((t) => _dateOnly(t.date) == d).toList()
       ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
   }
 
@@ -77,8 +76,9 @@ class TaskRepository {
   int countCompletedToday() {
     final today = _dateOnly(DateTime.now());
     return getAllTasks()
-        .where((t) =>
-            _dateOnly(t.date) == today && t.status == TaskStatus.completed)
+        .where(
+          (t) => _dateOnly(t.date) == today && t.status == TaskStatus.completed,
+        )
         .length;
   }
 
@@ -109,6 +109,13 @@ class TaskRepository {
         } catch (_) {}
       }
     }
+  }
+
+  // PRIMER CAMBIO REALIZADO
+  Future<void> replaceAll(List<Task> tasks) async {
+    await _tasksBox.clear();
+    final map = {for (final t in tasks) t.id: t.toJsonString()};
+    await _tasksBox.putAll(map);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────

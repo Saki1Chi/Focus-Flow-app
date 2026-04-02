@@ -1,0 +1,41 @@
+{
+  "blocked_apps": [
+    "VALORANT-Win64-Shipping.exe",
+    "FortniteClient-Win64-Shipping.exe"
+  ],
+  "tasks_date": "2026-04-02",
+  "tasks": [
+    {
+      "id": "fdf46b51-2b0f-4fd1-a249-2fd03f5655e7",
+      "text": "avanzar pagina wordpress",
+      "done": false
+    },
+    {
+      "id": "77d407a4-17ce-467f-a70f-362c035d4007",
+      "text": "avanzar proyecto mobiles",
+      "done": false
+    },
+    {
+      "id": "ba8227f9-beca-4564-a3af-7b613477a9c6",
+      "text": "avanzar proyecto traductores",
+      "done": false
+    },
+    {
+      "id": "d51aba4e-0a8e-43b5-9988-e378c5e65b79",
+      "text": "avanzar ciencia de datos actividad",
+      "done": false
+    },
+    {
+      "id": "7623dec3-b21c-4f99-a61c-f9be81e96016",
+      "text": "avanzar proyecto personal",
+      "done": false
+    }
+  ],
+  "unlock_hour": 0,
+  "unlock_duration_minutes": 20,
+  "blocks_to_unlock": 3,
+  "completed_blocks_today": 1,
+  "blocks_date": "2026-04-02",
+  "dark_mode": true,
+  "accent_color": "blue"
+}

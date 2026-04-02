@@ -45,6 +45,9 @@ dependencies:
   # Typography
   google_fonts: ^6.2.1
 
+  # Color picker for custom accents
+  flutter_colorpicker: ^1.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

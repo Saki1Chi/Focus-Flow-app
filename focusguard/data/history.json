@@ -1,0 +1,38 @@
+[
+  {
+    "fecha": "2026-03-27",
+    "tareas_total": 0,
+    "tareas_completadas": 0,
+    "desbloqueado_por": "hora"
+  },
+  {
+    "fecha": "2026-03-28",
+    "tareas_total": 1,
+    "tareas_completadas": 1,
+    "desbloqueado_por": "tareas"
+  },
+  {
+    "fecha": "2026-03-29",
+    "tareas_total": 5,
+    "tareas_completadas": 5,
+    "desbloqueado_por": "tareas"
+  },
+  {
+    "fecha": "2026-03-31",
+    "tareas_total": 5,
+    "tareas_completadas": 0,
+    "desbloqueado_por": "hora"
+  },
+  {
+    "fecha": "2026-04-01",
+    "tareas_total": 5,
+    "tareas_completadas": 0,
+    "desbloqueado_por": "hora"
+  },
+  {
+    "fecha": "2026-04-02",
+    "tareas_total": 5,
+    "tareas_completadas": 0,
+    "desbloqueado_por": "hora"
+  }
+]

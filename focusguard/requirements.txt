@@ -1,0 +1,4 @@
+psutil
+plyer
+tkcalendar
+backports.zoneinfo; python_version < "3.9"

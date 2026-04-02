@@ -18,6 +18,7 @@ class AppConstants {
   static const String keyAlertDelay = 'alert_delay_minutes';
   static const String keyDefaultMode = 'default_mode';
   static const String keyAccentColor = 'accent_color';
+  static const String keyCustomAccent = 'custom_accent_hex';
   static const String keyDarkMode = 'dark_mode';
   static const String keyOnboardingDone = 'onboarding_done';
   static const String keyCompletedBlocks = 'completed_blocks';
@@ -33,12 +34,16 @@ class AppConstants {
   static const String reminderChannelId = 'focusflow_reminders';
   static const String reminderChannelName = 'Task Reminders';
 
-  // Accent colors
+  // Accent colors (presets)
   static const Map<String, Color> accentColors = {
-    'blue': Color(0xFF4A90E2),
-    'green': Color(0xFF27AE60),
-    'purple': Color(0xFF8E44AD),
-    'orange': Color(0xFFE67E22),
+    'blue': Color(0xFF3B82F6),
+    'green': Color(0xFF22C55E),
+    'amber': Color(0xFFF59E0B),
+    'coral': Color(0xFFF97369),
+    'violet': Color(0xFFA855F7),
+    'teal': Color(0xFF14B8A6),
+    'gray': Color(0xFF9CA3AF),
+    'custom': Color(0xFF3B82F6), // placeholder when custom selected
   };
 
   static const String defaultAccentColor = 'blue';

@@ -27,6 +27,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   Widget build(BuildContext context) {
     final tasks  = ref.watch(taskProvider);
     final accent = ref.watch(settingsProvider).accentColor;
+    final tokens = Theme.of(context).extension<MinimalTheme>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final selectedDayTasks = tasks
@@ -38,11 +39,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         .toList()
       ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
 
-    final calBg        = isDark ? const Color(0xFF0E0E1C) : Colors.white;
-    final headerColor  = isDark ? const Color(0xFFF0F0FF) : const Color(0xFF080818);
-    final weekdayColor = isDark ? const Color(0xFF484862) : const Color(0xFF9898B8);
-    final defaultColor = isDark ? const Color(0xFFE0E0FF) : const Color(0xFF080818);
-    final outsideColor = isDark ? const Color(0xFF2A2A42) : const Color(0xFFCCCCDD);
+    final calBg        = tokens?.surface ?? (isDark ? const Color(0xFF0E0E1C) : Colors.white);
+    final borderColor  = tokens?.border ??
+        (isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.06));
+    final headerColor  = tokens?.text ?? (isDark ? const Color(0xFFF0F0FF) : const Color(0xFF080818));
+    final weekdayColor = tokens?.textSub ?? (isDark ? const Color(0xFF484862) : const Color(0xFF9898B8));
+    final defaultColor = tokens?.text ?? (isDark ? const Color(0xFFE0E0FF) : const Color(0xFF080818));
+    final outsideColor = tokens?.textSub.withValues(alpha: 0.5) ??
+        (isDark ? const Color(0xFF2A2A42) : const Color(0xFFCCCCDD));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar')),
@@ -56,13 +60,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               decoration: BoxDecoration(
                 color: calBg,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.07)
-                      : Colors.black.withValues(alpha: 0.06),
-                  width: 1,
-                ),
-                boxShadow: isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
+                border: Border.all(color: borderColor, width: 1),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24),
@@ -89,26 +87,26 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     weekendTextStyle: TextStyle(color: defaultColor, fontSize: 13),
                     outsideTextStyle: TextStyle(color: outsideColor, fontSize: 13),
                     todayDecoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.14),
+                      color: accent.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: accent.withValues(alpha: 0.5), width: 1.5),
+                      border: Border.all(color: accent.withValues(alpha: 0.4), width: 1.2),
                     ),
                     todayTextStyle: TextStyle(
-                        color: accent, fontSize: 13, fontWeight: FontWeight.w700),
+                        color: tokens?.text ?? accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700),
                     selectedDecoration: BoxDecoration(
-                      color: accent,
+                      color: accent.withValues(alpha: 0.16),
                       shape: BoxShape.circle,
-                      boxShadow: NeonColors.glow(accent, intensity: 0.85),
+                      border: Border.all(color: accent, width: 1.4),
                     ),
-                    selectedTextStyle: const TextStyle(
-                        color: Colors.white,
+                    selectedTextStyle: TextStyle(
+                        color: tokens?.text ?? Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w700),
                     markerDecoration: BoxDecoration(
-                      color: accent,
+                      color: accent.withValues(alpha: 0.9),
                       shape: BoxShape.circle,
-                      boxShadow: NeonColors.glow(accent, intensity: 0.55),
                     ),
                     markerSize: 5,
                     markersMaxCount: 3,
@@ -179,102 +177,242 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
           // ── Task list ────────────────────────────────
           Expanded(
-            child: selectedDayTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(colors: [
-                              isDark
-                                  ? Colors.white.withValues(alpha: 0.06)
-                                  : Colors.black.withValues(alpha: 0.04),
-                              Colors.transparent,
-                            ]),
-                          ),
-                          child: Icon(
-                            Icons.event_available_rounded,
-                            size: 28,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.20)
-                                : Colors.black.withValues(alpha: 0.18),
-                          ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.03),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: selectedDayTasks.isEmpty
+                  ? _CalendarEmptyState(
+                      key: ValueKey('empty_${_selectedDay.toIso8601String()}'),
+                      accent: accent,
+                      isDark: isDark,
+                      selectedDay: _selectedDay,
+                      onAddTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AddTaskScreen(initialDate: _selectedDay),
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'No tasks on this day',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                        const SizedBox(height: 12),
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  AddTaskScreen(initialDate: _selectedDay),
+                      ),
+                    )
+                  : ListView.builder(
+                      key: ValueKey('list_${_selectedDay.toIso8601String()}'),
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 120),
+                      itemCount: selectedDayTasks.length,
+                      itemBuilder: (ctx, i) {
+                        final task = selectedDayTasks[i];
+                        return FadeInUp(
+                          duration: const Duration(milliseconds: 280),
+                          delay: Duration(milliseconds: 50 * i),
+                          child: TaskCard(
+                            task: task,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TaskDetailScreen(taskId: task.id),
+                              ),
                             ),
                           ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: accent.withValues(alpha: 0.25),
-                                  width: 1),
-                              boxShadow: isDark
-                                  ? NeonColors.softGlow(accent)
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.add_rounded, size: 15, color: accent),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Add task',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: accent,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 120),
-                    itemCount: selectedDayTasks.length,
-                    itemBuilder: (ctx, i) {
-                      final task = selectedDayTasks[i];
-                      return FadeInUp(
-                        duration: const Duration(milliseconds: 280),
-                        delay: Duration(milliseconds: 50 * i),
-                        child: TaskCard(
-                          task: task,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  TaskDetailScreen(taskId: task.id),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Empty state del calendario con ícono flotante ──────────────
+
+class _CalendarEmptyState extends StatefulWidget {
+  final Color accent;
+  final bool isDark;
+  final DateTime selectedDay;
+  final VoidCallback onAddTap;
+
+  const _CalendarEmptyState({
+    super.key,
+    required this.accent,
+    required this.isDark,
+    required this.selectedDay,
+    required this.onAddTap,
+  });
+
+  @override
+  State<_CalendarEmptyState> createState() => _CalendarEmptyStateState();
+}
+
+class _CalendarEmptyStateState extends State<_CalendarEmptyState>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _float;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    )..repeat(reverse: true);
+    _float = Tween<double>(begin: 0.0, end: -8.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _float,
+            builder: (_, child) => Transform.translate(
+              offset: Offset(0, _float.value),
+              child: child,
+            ),
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  widget.isDark
+                      ? Colors.white.withValues(alpha: 0.07)
+                      : Colors.black.withValues(alpha: 0.04),
+                  Colors.transparent,
+                ]),
+                boxShadow: widget.isDark
+                    ? [
+                        BoxShadow(
+                          color: widget.accent.withValues(alpha: 0.06),
+                          blurRadius: 20,
+                          spreadRadius: -4,
+                        )
+                      ]
+                    : null,
+              ),
+              child: Icon(
+                Icons.event_available_rounded,
+                size: 30,
+                color: widget.isDark
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : Colors.black.withValues(alpha: 0.18),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No tasks on this day',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 14),
+          _AddTaskButton(accent: widget.accent, isDark: widget.isDark, onTap: widget.onAddTap),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Botón "Add task" animado ───────────────────────────────────
+
+class _AddTaskButton extends StatefulWidget {
+  final Color accent;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _AddTaskButton({
+    required this.accent,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  State<_AddTaskButton> createState() => _AddTaskButtonState();
+}
+
+class _AddTaskButtonState extends State<_AddTaskButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 160),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.93).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) {
+        _ctrl.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _ctrl.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+                color: widget.accent.withValues(alpha: 0.25), width: 1),
+            boxShadow: widget.isDark
+                ? NeonColors.softGlow(widget.accent)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_rounded, size: 15, color: widget.accent),
+              const SizedBox(width: 6),
+              Text(
+                'Add task',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: widget.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

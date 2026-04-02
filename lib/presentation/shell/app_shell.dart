@@ -18,6 +18,7 @@ class AppShell extends ConsumerWidget {
     final index  = ref.watch(_navIndexProvider);
     final accent = ref.watch(settingsProvider).accentColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     const screens = [
       HomeScreen(),
@@ -28,7 +29,28 @@ class AppShell extends ConsumerWidget {
 
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(index: index, children: screens),
+      body: Stack(
+        children: List.generate(screens.length, (i) {
+          final isActive = i == index;
+          return IgnorePointer(
+            ignoring: !isActive,
+            child: AnimatedOpacity(
+              duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              opacity: isActive ? 1.0 : 0.0,
+              child: AnimatedSlide(
+                duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                offset: isActive ? Offset.zero : const Offset(0.04, 0),
+                child: TickerMode(
+                  enabled: isActive,
+                  child: screens[i],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
       floatingActionButton: (index == 0 || index == 1)
           ? _NeonFAB(
               key: ValueKey('fab_$index'),
@@ -50,8 +72,8 @@ class AppShell extends ConsumerWidget {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, anim, __) => const AddTaskScreen(),
-        transitionsBuilder: (_, anim, __, child) {
+        pageBuilder: (context, anim, secondaryAnim) => const AddTaskScreen(),
+        transitionsBuilder: (context, anim, secondaryAnim, child) {
           return SlideTransition(
             position: Tween<Offset>(
               begin: const Offset(0, 1),
@@ -70,7 +92,7 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-// ── FAB with elastic entrance animation ────────────────────────
+// ── FAB con animación de entrada elástica + respiración ────────
 
 class _NeonFAB extends StatefulWidget {
   final Color accent;
@@ -82,52 +104,75 @@ class _NeonFAB extends StatefulWidget {
 }
 
 class _NeonFABState extends State<_NeonFAB>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
+    with TickerProviderStateMixin {
+  late final AnimationController _entranceCtrl;
+  late final AnimationController _breatheCtrl;
+  late final Animation<double> _entranceScale;
+  late final Animation<double> _breatheScale;
+  late final Animation<double> _glowPulse;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
+    _entranceCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 650));
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
-    _ctrl.forward();
+    _breatheCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2200));
+
+    _entranceScale = CurvedAnimation(
+        parent: _entranceCtrl, curve: Curves.elasticOut);
+    _breatheScale = Tween<double>(begin: 1.0, end: 1.07).animate(
+      CurvedAnimation(parent: _breatheCtrl, curve: Curves.easeInOut),
+    );
+    _glowPulse = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _breatheCtrl, curve: Curves.easeInOut),
+    );
+
+    _entranceCtrl.forward().then((_) {
+      if (mounted) _breatheCtrl.repeat(reverse: true);
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _entranceCtrl.dispose();
+    _breatheCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
-      scale: _scale,
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: widget.accent.withValues(alpha: 0.55),
-              blurRadius: 24,
-              spreadRadius: -2,
+      scale: _entranceScale,
+      child: AnimatedBuilder(
+        animation: _breatheCtrl,
+        builder: (_, child) => Transform.scale(
+          scale: _breatheScale.value,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: widget.accent.withValues(alpha: 0.55 * _glowPulse.value),
+                  blurRadius: 28,
+                  spreadRadius: -2,
+                ),
+                BoxShadow(
+                  color: widget.accent.withValues(alpha: 0.20 * _glowPulse.value),
+                  blurRadius: 52,
+                  spreadRadius: -8,
+                ),
+              ],
             ),
-            BoxShadow(
-              color: widget.accent.withValues(alpha: 0.22),
-              blurRadius: 48,
-              spreadRadius: -8,
+            child: FloatingActionButton(
+              onPressed: widget.onPressed,
+              backgroundColor: widget.accent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              highlightElevation: 0,
+              child: const Icon(Icons.add_rounded, size: 28),
             ),
-          ],
-        ),
-        child: FloatingActionButton(
-          onPressed: widget.onPressed,
-          backgroundColor: widget.accent,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          highlightElevation: 0,
-          child: const Icon(Icons.add_rounded, size: 28),
+          ),
         ),
       ),
     );
@@ -190,7 +235,7 @@ class _FloatingNavBar extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
             child: Container(
-              height: 62,
+              height: 66,
               decoration: BoxDecoration(
                 color: bg,
                 borderRadius: BorderRadius.circular(30),
@@ -229,7 +274,7 @@ class _FloatingNavBar extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           AnimatedContainer(
-                            duration: const Duration(milliseconds: 240),
+                            duration: const Duration(milliseconds: 260),
                             curve: Curves.easeOutCubic,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 5),
@@ -248,10 +293,15 @@ class _FloatingNavBar extends StatelessWidget {
                                     ]
                                   : null,
                             ),
-                            child: Icon(
-                              selected ? item.active : item.icon,
-                              color: color,
-                              size: 21,
+                            child: AnimatedScale(
+                              scale: selected ? 1.12 : 1.0,
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutBack,
+                              child: Icon(
+                                selected ? item.active : item.icon,
+                                color: color,
+                                size: 21,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 1),
@@ -266,6 +316,26 @@ class _FloatingNavBar extends StatelessWidget {
                               letterSpacing: 0.2,
                             ),
                             child: Text(item.label),
+                          ),
+                          const SizedBox(height: 3),
+                          // Indicador deslizante bajo el ítem activo
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 280),
+                            curve: Curves.easeOutBack,
+                            width: selected ? 18 : 0,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: accent,
+                              borderRadius: BorderRadius.circular(2),
+                              boxShadow: selected
+                                  ? [
+                                      BoxShadow(
+                                        color: accent.withValues(alpha: 0.65),
+                                        blurRadius: 6,
+                                      )
+                                    ]
+                                  : null,
+                            ),
                           ),
                         ],
                       ),
