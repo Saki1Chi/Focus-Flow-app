@@ -64,14 +64,15 @@ class BlockerThread(threading.Thread):
 
                 with cfg.get_lock():
                     active  = cfg.is_blocking_active()
-                    blocked = set(cfg.get_data().get("blocked_apps", []))
+                    blocked = {b.lower() for b in cfg.get_data().get("blocked_apps", [])}
 
                 if not active or not blocked:
                     continue
 
                 for proc in psutil.process_iter(["name", "pid"]):
                     try:
-                        if proc.info["name"] in blocked:
+                        name = (proc.info.get("name") or "").lower()
+                        if name in blocked:
                             proc.kill()
                             log.warning(
                                 f"Proceso terminado: {proc.info['name']} "

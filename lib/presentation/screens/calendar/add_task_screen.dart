@@ -6,6 +6,7 @@ import '../../../data/models/task_model.dart';
 import '../../../data/models/recurrence_rule.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/category_provider.dart';
 
 class AddTaskScreen extends ConsumerStatefulWidget {
   final Task? editTask;
@@ -25,6 +26,7 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
   late DateTime _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+  int? _selectedCategoryId;
   bool _hasRecurrence = false;
   RepeatType _repeatType = RepeatType.daily;
   int _interval = 1;
@@ -42,6 +44,7 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
     _selectedDate = task?.date ?? widget.initialDate ?? DateTime.now();
     if (task?.startTime != null) _startTime = TimeOfDay.fromDateTime(task!.startTime!);
     if (task?.endTime   != null) _endTime   = TimeOfDay.fromDateTime(task!.endTime!);
+    _selectedCategoryId = task?.categoryId;
     if (task?.recurrence != null) {
       _hasRecurrence = true;
       final r = task!.recurrence!;
@@ -151,6 +154,10 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
             ]),
             const SizedBox(height: 16),
 
+            // Category
+            _buildCategoryRow(accent, isDark),
+            const SizedBox(height: 16),
+
             // Recurrence toggle
             _RecurrenceToggle(
               value: _hasRecurrence,
@@ -186,6 +193,63 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCategoryRow(Color accent, bool isDark) {
+    final catState = ref.watch(categoryProvider);
+    if (catState.isLoading) {
+      return const SizedBox(height: 36, child: Center(child: LinearProgressIndicator()));
+    }
+    if (catState.categories.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel(label: 'Category', accent: accent),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: catState.categories.length + 1, // +1 for "None"
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                // "None" chip
+                final selected = _selectedCategoryId == null;
+                return ChoiceChip(
+                  label: const Text('None'),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _selectedCategoryId = null),
+                  selectedColor: accent.withValues(alpha: 0.2),
+                  side: BorderSide(
+                    color: selected ? accent : Colors.transparent,
+                    width: 1.5,
+                  ),
+                );
+              }
+              final cat = catState.categories[i - 1];
+              final selected = _selectedCategoryId == cat.id;
+              return ChoiceChip(
+                avatar: CircleAvatar(
+                  backgroundColor: cat.colorValue,
+                  radius: 8,
+                ),
+                label: Text(cat.name),
+                selected: selected,
+                onSelected: (_) =>
+                    setState(() => _selectedCategoryId = selected ? null : cat.id),
+                selectedColor: cat.colorValue.withValues(alpha: 0.18),
+                side: BorderSide(
+                  color: selected ? cat.colorValue : Colors.transparent,
+                  width: 1.5,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -392,6 +456,8 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
         endTime: endDt,
         recurrence: recurrence,
         isRecurringParent: _hasRecurrence,
+        categoryId: _selectedCategoryId,
+        clearCategory: _selectedCategoryId == null,
       );
       await notifier.updateTask(updated);
     } else {
@@ -403,6 +469,8 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
         endTime: endDt,
         mode: TaskMode.calendar,
         recurrence: recurrence,
+        isRecurringParent: _hasRecurrence,
+        categoryId: _selectedCategoryId,
       );
     }
 

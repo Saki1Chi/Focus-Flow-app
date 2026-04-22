@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/task_model.dart';
 import '../providers/task_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/category_provider.dart';
 import 'calendar/add_task_screen.dart';
 
 class TaskDetailScreen extends ConsumerWidget {
@@ -19,9 +20,10 @@ class TaskDetailScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('Task not found')));
     }
 
-    final accent   = ref.watch(settingsProvider).accentColor;
-    final notifier = ref.read(taskProvider.notifier);
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final accent    = ref.watch(settingsProvider).accentColor;
+    final notifier  = ref.read(taskProvider.notifier);
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final category  = ref.watch(categoryProvider).byId(task.categoryId);
 
     final statusColor = _statusColor(task.status, accent);
 
@@ -97,6 +99,12 @@ class TaskDetailScreen extends ConsumerWidget {
                           icon: Icons.repeat_rounded,
                           label: 'Recurring task',
                           accent: accent,
+                        ),
+                      if (category != null)
+                        _InfoRow(
+                          icon: Icons.label_rounded,
+                          label: category.name,
+                          accent: category.colorValue,
                         ),
                     ],
                   ),

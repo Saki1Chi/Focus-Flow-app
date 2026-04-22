@@ -21,7 +21,9 @@ class AppConstants {
   static const String keyCustomAccent = 'custom_accent_hex';
   static const String keyDarkMode = 'dark_mode';
   static const String keyOnboardingDone = 'onboarding_done';
-  static const String keyCompletedBlocks = 'completed_blocks';
+  static const String keyCompletedBlocks  = 'completed_blocks';
+  static const String keyCurrentStreak   = 'current_streak';
+  static const String keyLastStreakDate  = 'last_streak_date'; // ISO date string
 
   // Defaults
   static const int defaultUnlockDuration = 20; // minutes
@@ -48,8 +50,17 @@ class AppConstants {
 
   static const String defaultAccentColor = 'blue';
 
+  // ── Social / Auth ────────────────────────────────────────────────────────
+  static const String keySocialToken = 'social_token';
+  static const String keySocialUser  = 'social_user_json';
+
   // ── Backend API ─────────────────────────────────────────────────────────
-  // Android emulator → host machine localhost: 10.0.2.2
-  // Physical device (same Wi-Fi) → use your machine's local IP, e.g. 192.168.x.x
-  static const String apiBaseUrl = 'http://10.0.2.2:8000';
+  // Valor por defecto. Cambiable en Settings → Server Sync → API URL,
+  // o en build time: flutter run --dart-define=API_URL=https://tu-dominio.com
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://192.168.100.81:8000',
+  );
+
+  static const String keyApiBaseUrl = 'api_base_url';
 }

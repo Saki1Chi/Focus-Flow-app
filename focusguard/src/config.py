@@ -21,9 +21,17 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 try:
+    import keyring as _keyring
+    _KEYRING_OK = True
+except ImportError:
+    _keyring = None  # type: ignore[assignment]
+    _KEYRING_OK = False
+
+try:
     from zoneinfo import ZoneInfo
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+from datetime import timezone, timedelta
 
 # ── Rutas dinamicas (todo dentro del proyecto) ────────────────────────────────
 BASE_DIR     = Path(__file__).resolve().parent.parent   # FocusGuard/
@@ -34,7 +42,11 @@ LOG_PATH     = DATA_DIR / "focusguard.log"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-MEXICO_TZ = ZoneInfo("America/Mexico_City")
+try:
+    MEXICO_TZ = ZoneInfo("America/Mexico_City")
+except Exception:
+    # Fallback si tzdata no está instalado; usa UTC-6 (CDMX estándar)
+    MEXICO_TZ = timezone(timedelta(hours=-6))
 
 DEFAULT_CONFIG: dict = {
     "blocked_apps": [
@@ -50,6 +62,9 @@ DEFAULT_CONFIG: dict = {
     "blocks_date":              "",
     "dark_mode":                False,
     "accent_color":             "blue",
+    # API / sincronización con el dashboard FocusFlow CMS
+    "api_base_url":    "http://localhost:8000",
+    "api_sync_enabled": True,
     # legacy — solo para migración en primer arranque
     "tasks_date":  "",
     "tasks":       [],
@@ -58,6 +73,13 @@ DEFAULT_CONFIG: dict = {
 # ── Singleton + lock ──────────────────────────────────────────────────────────
 _lock: threading.RLock = threading.RLock()
 _data: dict | None     = None
+
+# ── Estado de privilegios (fijado por main.py tras el chequeo UAC) ────────────
+_admin_status: bool = False
+
+# ── Keyring ───────────────────────────────────────────────────────────────────
+_KR_SERVICE  = "FocusGuard"
+_KR_TOKEN    = "api_token"
 
 log = logging.getLogger("focusguard.config")
 
@@ -72,9 +94,19 @@ def setup_logging() -> None:
         "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = logging.handlers.RotatingFileHandler(
-        LOG_PATH, maxBytes=1_048_576, backupCount=2, encoding="utf-8",
-    )
+    try:
+        fh = logging.handlers.RotatingFileHandler(
+            LOG_PATH, maxBytes=1_048_576, backupCount=2, encoding="utf-8",
+        )
+        log_path_used = LOG_PATH
+    except PermissionError:
+        fallback = Path.cwd() / "focusguard.user.log"
+        fh = logging.handlers.RotatingFileHandler(
+            fallback, maxBytes=1_048_576, backupCount=2, encoding="utf-8",
+        )
+        log_path_used = fallback
+        # print en vez de logging (aún no configurado)
+        print(f"[focusguard] Warning: sin permiso para {LOG_PATH}, usando {fallback}")
     fh.setFormatter(fmt)
     root_log.addHandler(fh)
 
@@ -82,6 +114,8 @@ def setup_logging() -> None:
     ch.setLevel(logging.INFO)
     ch.setFormatter(fmt)
     root_log.addHandler(ch)
+
+    root_log.info(f"Logging inicializado en {log_path_used}")
 
 
 # ── I/O interno ───────────────────────────────────────────────────────────────
@@ -305,6 +339,129 @@ def set_dark_mode(value: bool) -> None:
         _save_to_disk(data)
 
 
+# ── API / sincronización con el dashboard ─────────────────────────────────────
+def get_api_base_url() -> str:
+    with _lock:
+        return load().get("api_base_url", "http://localhost:8000")
+
+
+def set_api_base_url(url: str) -> None:
+    with _lock:
+        url = url.rstrip("/")
+        _warn_if_insecure_url(url)
+        data = load()
+        data["api_base_url"] = url
+        _save_to_disk(data)
+        log.info(f"API base URL configurada: {url!r}")
+
+
+def _warn_if_insecure_url(url: str) -> None:
+    """Advierte si la URL usa HTTP (no HTTPS) y no es localhost."""
+    is_http = url.startswith("http://")
+    is_local = any(url.startswith(f"http://{h}") for h in ("localhost", "127.", "0.0.0.0"))
+    if is_http and not is_local:
+        log.warning(
+            "URL del backend usa HTTP sin cifrado: %s — "
+            "se recomienda HTTPS para comunicaciones remotas.", url
+        )
+
+
+def is_api_sync_enabled() -> bool:
+    with _lock:
+        return bool(load().get("api_sync_enabled", True))
+
+
+def set_api_sync_enabled(value: bool) -> None:
+    with _lock:
+        data = load()
+        data["api_sync_enabled"] = value
+        _save_to_disk(data)
+        log.info(f"Sincronización API {'habilitada' if value else 'deshabilitada'}.")
+
+
+# ── Nombre de usuario (no sensible, guardado en config.json) ──────────────────
+def get_api_username() -> str:
+    with _lock:
+        return load().get("api_username", "")
+
+
+def set_api_username(username: str) -> None:
+    with _lock:
+        data = load()
+        data["api_username"] = username
+        _save_to_disk(data)
+
+
+# ── Token de autenticación (guardado en Windows Credential Manager vía keyring)
+# Si keyring no está disponible, cae en config.json como fallback (menos seguro).
+
+def get_api_token() -> str:
+    """Lee el token desde Windows Credential Manager (o config.json si keyring falla)."""
+    if _KEYRING_OK:
+        try:
+            return _keyring.get_password(_KR_SERVICE, _KR_TOKEN) or ""
+        except Exception as e:
+            log.warning("keyring get falló: %s — intentando config.json", e)
+    with _lock:
+        return load().get("api_token_fallback", "")
+
+
+def set_api_token(token: str) -> None:
+    """Guarda el token en Windows Credential Manager (o config.json si keyring falla)."""
+    if _KEYRING_OK:
+        try:
+            if token:
+                _keyring.set_password(_KR_SERVICE, _KR_TOKEN, token)
+            else:
+                _delete_keyring_token()
+            log.info("Token guardado en Windows Credential Manager.")
+            return
+        except Exception as e:
+            log.warning("keyring set falló: %s — usando config.json como fallback", e)
+    # Fallback: config.json (menos seguro, pero funcional)
+    with _lock:
+        data = load()
+        data["api_token_fallback"] = token
+        _save_to_disk(data)
+        log.warning("Token guardado en config.json (fallback). Instala keyring para mayor seguridad.")
+
+
+def delete_api_token() -> None:
+    """Elimina el token almacenado."""
+    _delete_keyring_token()
+    with _lock:
+        data = load()
+        data.pop("api_token_fallback", None)
+        _save_to_disk(data)
+    log.info("Token de API eliminado.")
+
+
+def _delete_keyring_token() -> None:
+    if not _KEYRING_OK:
+        return
+    try:
+        _keyring.delete_password(_KR_SERVICE, _KR_TOKEN)
+    except Exception:
+        pass
+
+
+# ── Estado de privilegios de administrador ────────────────────────────────────
+
+def set_admin_status(is_admin: bool) -> None:
+    """Llamado por main.py tras el chequeo UAC."""
+    global _admin_status
+    _admin_status = is_admin
+    if not is_admin:
+        log.warning(
+            "FocusGuard corriendo SIN privilegios de administrador. "
+            "El bloqueador puede no poder terminar procesos protegidos."
+        )
+
+
+def is_running_as_admin() -> bool:
+    return _admin_status
+
+
 # ── Historial de productividad ────────────────────────────────────────────────
 def save_history(reason: str) -> None:
     """Guarda snapshot del dia en history.json. reason: 'hora' | 'tareas'."""
@@ -316,10 +473,13 @@ def save_history(reason: str) -> None:
         done  = sum(1 for t in tasks if t["done"])
 
         history: list = []
-        if HISTORY_PATH.exists():
+        for candidate in (HISTORY_PATH, Path(str(HISTORY_PATH) + ".bak")):
+            if not candidate.exists():
+                continue
             try:
-                with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+                with open(candidate, "r", encoding="utf-8") as f:
                     history = json.load(f)
+                break
             except Exception:
                 history = []
 
@@ -331,20 +491,32 @@ def save_history(reason: str) -> None:
             "desbloqueado_por":   reason,
         })
 
-        with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+        tmp = Path(str(HISTORY_PATH) + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2, ensure_ascii=False)
+        tmp.replace(HISTORY_PATH)
+        try:
+            bak = Path(str(HISTORY_PATH) + ".bak")
+            shutil.copy2(HISTORY_PATH, bak)
+        except Exception:
+            pass
 
         log.info(f"Historial guardado: {today}, {done}/{total}, motivo={reason!r}")
 
 
 def get_streak() -> int:
     """Dias consecutivos con todas las tareas completadas."""
-    if not HISTORY_PATH.exists():
-        return 0
-    try:
-        with open(HISTORY_PATH, "r", encoding="utf-8") as f:
-            history = json.load(f)
-    except Exception:
+    history = []
+    for candidate in (HISTORY_PATH, Path(str(HISTORY_PATH) + ".bak")):
+        if not candidate.exists():
+            continue
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                history = json.load(f)
+            break
+        except Exception:
+            history = []
+    if not history:
         return 0
 
     today  = date.today()

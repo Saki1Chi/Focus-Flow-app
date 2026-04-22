@@ -49,6 +49,8 @@ focusguard/data/*.log*
 focusguard/data/*.bak
 focusguard/__pycache__/
 focusguard/src/__pycache__/
+focusguard/.venv/
+focusguard/venv/
 
 # Backend
 backend/__pycache__/

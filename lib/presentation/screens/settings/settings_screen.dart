@@ -213,6 +213,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               FadeInDown(
+                duration: const Duration(milliseconds: 635),
+                delay: const Duration(milliseconds: 175),
+                child: _StatTile(
+                  icon: Icons.local_fire_department_rounded,
+                  title: 'Current Streak',
+                  value: '${ref.watch(settingsProvider).currentStreak} days',
+                  accent: const Color(0xFFF97316),
+                  isDark: isDark,
+                ),
+              ),
+              FadeInDown(
                 duration: const Duration(milliseconds: 640),
                 delay: const Duration(milliseconds: 180),
                 child: _StatTile(
@@ -231,6 +242,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 duration: const Duration(milliseconds: 660),
                 delay: const Duration(milliseconds: 190),
                 child: _SectionHeader(title: 'SERVER SYNC', accent: accent),
+              ),
+
+              FadeInDown(
+                duration: const Duration(milliseconds: 665),
+                delay: const Duration(milliseconds: 193),
+                child: _ApiUrlTile(
+                  accent: accent,
+                  isDark: isDark,
+                  currentUrl: settings.apiBaseUrl,
+                  onSave: (url) => notifier.setApiBaseUrl(url),
+                ),
               ),
 
               FadeInDown(
@@ -1128,6 +1150,120 @@ class _PullTileState extends ConsumerState<_PullTile> {
   }
 } // aqui termina el cambio
 
+
+// ── API URL tile ────────────────────────────────────────────────
+
+class _ApiUrlTile extends StatefulWidget {
+  final Color accent;
+  final bool isDark;
+  final String currentUrl;
+  final Future<void> Function(String) onSave;
+
+  const _ApiUrlTile({
+    required this.accent,
+    required this.isDark,
+    required this.currentUrl,
+    required this.onSave,
+  });
+
+  @override
+  State<_ApiUrlTile> createState() => _ApiUrlTileState();
+}
+
+class _ApiUrlTileState extends State<_ApiUrlTile> {
+  late final TextEditingController _ctrl;
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.currentUrl);
+  }
+
+  @override
+  void didUpdateWidget(_ApiUrlTile old) {
+    super.didUpdateWidget(old);
+    if (!_editing) _ctrl.text = widget.currentUrl;
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final url = _ctrl.text.trim();
+    if (url.isEmpty) return;
+    await widget.onSave(url);
+    if (mounted) {
+      setState(() => _editing = false);
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('API URL saved')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg     = widget.isDark ? const Color(0xFF0E0E1C) : Colors.white;
+    final border = widget.isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border, width: 1),
+        boxShadow: widget.isDark ? NeonColors.crystalCard() : NeonColors.lightCard(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: widget.accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.dns_rounded, color: widget.accent, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('API URL',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            onTap: () => setState(() => _editing = true),
+            onSubmitted: (_) => _save(),
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: InputDecoration(
+              hintText: 'https://tu-backend.railway.app',
+              suffixIcon: _editing
+                  ? IconButton(
+                      icon: Icon(Icons.check_rounded, color: widget.accent),
+                      onPressed: _save,
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SyncTileState extends ConsumerState<_SyncTile> {
   bool _syncing = false;

@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from .tray import StatusBar
 
 from . import config as cfg
-from .models import Task, TaskStatus, TaskMode, BlockSession
+from .models import (Task, TaskStatus, TaskMode, BlockSession,
+                      RecurrenceRule, RepeatType, EndType)
 from .repository import TaskRepository
 from .scheduler import SchedulerService
 from .widgets import (
@@ -29,6 +30,138 @@ from .widgets import (
 
 log = logging.getLogger("focusguard.ui")
 MEXICO_TZ = cfg.MEXICO_TZ
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LoginDialog — inicio de sesión con el backend (#1)
+# ══════════════════════════════════════════════════════════════════════════════
+class LoginDialog:
+    """Diálogo modal para autenticarse con el backend FocusFlow."""
+
+    def __init__(self, root: tk.Tk, on_success) -> None:
+        self._root       = root
+        self._on_success = on_success  # callable(username: str)
+
+        self._top = tk.Toplevel(root)
+        self._top.title("Iniciar sesión")
+        self._top.configure(bg=T.BG_BASE)
+        self._top.resizable(False, False)
+        self._top.grab_set()
+
+        root.update_idletasks()
+        x = root.winfo_x() + max(0, (root.winfo_width()  - 360) // 2)
+        y = root.winfo_y() + max(0, (root.winfo_height() - 300) // 2)
+        self._top.geometry(f"360x300+{x}+{y}")
+
+        self._build()
+
+    def _build(self) -> None:
+        p = self._top
+
+        tk.Label(p, text="Cuenta FocusFlow",
+                 font=("Segoe UI", 14, "bold"),
+                 bg=T.BG_BASE, fg=T.TEXT_PRIMARY).pack(pady=(28, 4))
+        tk.Label(p, text="Sincroniza tus tareas con el dashboard",
+                 font=("Segoe UI", 8),
+                 bg=T.BG_BASE, fg=T.TEXT_MUTED2).pack(pady=(0, 20))
+
+        # ── Usuario ────────────────────────────────────────────────────────────
+        uw = tk.Frame(p, bg=T.BORDER)
+        uw.pack(fill="x", padx=28, pady=(0, 8))
+        tk.Label(uw, text="Usuario", font=("Segoe UI", 7),
+                 bg=T.BG_INPUT, fg=T.TEXT_MUTED2,
+                 anchor="w").pack(fill="x", padx=8, pady=(4, 0))
+        self._user_var = tk.StringVar()
+        ue = tk.Entry(uw, textvariable=self._user_var,
+                      font=("Segoe UI", 10),
+                      bg=T.BG_INPUT, fg=T.TEXT_PRIMARY,
+                      insertbackground=T.ACCENT_BLUE,
+                      relief="flat", bd=0, highlightthickness=0)
+        ue.pack(fill="x", padx=8, pady=(0, 6), ipady=4)
+        ue.bind("<FocusIn>",  lambda e: uw.config(bg=T.BORDER_FOCUS))
+        ue.bind("<FocusOut>", lambda e: uw.config(bg=T.BORDER))
+        ue.bind("<Return>",   lambda e: self._do_login())
+
+        # ── Contraseña ─────────────────────────────────────────────────────────
+        pw = tk.Frame(p, bg=T.BORDER)
+        pw.pack(fill="x", padx=28, pady=(0, 6))
+        tk.Label(pw, text="Contraseña", font=("Segoe UI", 7),
+                 bg=T.BG_INPUT, fg=T.TEXT_MUTED2,
+                 anchor="w").pack(fill="x", padx=8, pady=(4, 0))
+        self._pass_var = tk.StringVar()
+        pe = tk.Entry(pw, textvariable=self._pass_var, show="*",
+                      font=("Segoe UI", 10),
+                      bg=T.BG_INPUT, fg=T.TEXT_PRIMARY,
+                      insertbackground=T.ACCENT_BLUE,
+                      relief="flat", bd=0, highlightthickness=0)
+        pe.pack(fill="x", padx=8, pady=(0, 6), ipady=4)
+        pe.bind("<FocusIn>",  lambda e: pw.config(bg=T.BORDER_FOCUS))
+        pe.bind("<FocusOut>", lambda e: pw.config(bg=T.BORDER))
+        pe.bind("<Return>",   lambda e: self._do_login())
+
+        # ── Estado ─────────────────────────────────────────────────────────────
+        self._status_lbl = tk.Label(p, text="",
+                                    font=("Segoe UI", 8),
+                                    bg=T.BG_BASE, fg=T.ACCENT_RED)
+        self._status_lbl.pack(pady=(0, 4))
+
+        # ── Botón ──────────────────────────────────────────────────────────────
+        btn_wrap = tk.Frame(p, bg=T.ACCENT_BLUE)
+        btn_wrap.pack(fill="x", padx=28)
+        self._btn = tk.Button(btn_wrap, text="Iniciar sesión",
+                              font=("Segoe UI", 10, "bold"),
+                              bg=T.BG_SURFACE2, fg=T.ACCENT_BLUE,
+                              relief="flat", bd=0, cursor="hand2",
+                              padx=8, pady=8,
+                              command=self._do_login)
+        self._btn.pack(fill="x", padx=1, pady=1)
+        self._btn.bind("<Enter>", lambda e: self._btn.config(bg=T.BORDER))
+        self._btn.bind("<Leave>", lambda e: self._btn.config(bg=T.BG_SURFACE2))
+
+    def _do_login(self) -> None:
+        username = self._user_var.get().strip()
+        password = self._pass_var.get()
+        if not username:
+            self._status_lbl.config(text="Ingresa tu nombre de usuario.")
+            return
+        if not password:
+            self._status_lbl.config(text="Ingresa tu contraseña.")
+            return
+
+        self._btn.config(state="disabled", text="Conectando…")
+        self._status_lbl.config(text="")
+
+        def _worker() -> None:
+            try:
+                from .api_service import ApiService
+                api   = ApiService(base_url=cfg.get_api_base_url())
+                token = api.login(username, password)
+                cfg.set_api_token(token)
+                cfg.set_api_username(username)
+                log.info("Login exitoso como '%s'.", username)
+                self._top.after(0, lambda: self._on_done(username))
+            except Exception as exc:
+                msg = str(exc)
+                if "401" in msg:
+                    msg = "Usuario o contraseña incorrectos."
+                elif "403" in msg:
+                    msg = "Cuenta deshabilitada."
+                elif "Connection" in msg or "timeout" in msg.lower():
+                    msg = "No se pudo conectar al servidor."
+                else:
+                    msg = f"Error: {msg[:60]}"
+                log.warning("Login fallido: %s", exc)
+                self._top.after(0, lambda m=msg: self._on_error(m))
+
+        threading.Thread(target=_worker, daemon=True, name="focusguard-login").start()
+
+    def _on_done(self, username: str) -> None:
+        self._on_success(username)
+        self._top.destroy()
+
+    def _on_error(self, msg: str) -> None:
+        self._status_lbl.config(text=msg)
+        self._btn.config(state="normal", text="Iniciar sesión")
 
 
 # ── Notificación ───────────────────────────────────────────────────────────────
@@ -85,6 +218,421 @@ class SmoothScroller:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# TaskEditDialog
+# ══════════════════════════════════════════════════════════════════════════════
+class TaskEditDialog:
+    """Diálogo modal para editar todos los campos de una tarea."""
+
+    _MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
+               "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+    def __init__(self, root: tk.Tk, task: Task, repo, on_save) -> None:
+        self._root   = root
+        self._task   = task
+        self._repo   = repo
+        self._on_save = on_save
+
+        self._top = tk.Toplevel(root)
+        self._top.title("Editar tarea")
+        self._top.configure(bg=T.BG_BASE)
+        self._top.resizable(False, True)
+        self._top.grab_set()
+        self._top.minsize(520, 420)
+
+        root.update_idletasks()
+        x = root.winfo_x() + max(0, (root.winfo_width()  - 520) // 2)
+        y = root.winfo_y() + max(0, (root.winfo_height() - 640) // 2)
+        self._top.geometry(f"520x640+{x}+{y}")
+
+        self._build()
+
+    # ── Layout helpers ─────────────────────────────────────────────────────────
+
+    def _section(self, parent: tk.Frame, label: str) -> None:
+        f = tk.Frame(parent, bg=T.BG_BASE)
+        f.pack(fill="x", padx=20, pady=(16, 4))
+        tk.Label(f, text=label.upper(), font=("Segoe UI", 7, "bold"),
+                 bg=T.BG_BASE, fg=T.TEXT_MUTED2).pack(side="left")
+        tk.Frame(f, bg=T.SEPARATOR, height=1).pack(
+            side="left", fill="x", expand=True, padx=(8, 0))
+
+    def _spin(self, parent: tk.Frame, lo: int, hi: int,
+              val: int, width: int = 3, step: int = 1) -> tk.Spinbox:
+        w = tk.Spinbox(parent, from_=lo, to=hi, width=width,
+                       increment=step,
+                       font=("Segoe UI", 10, "bold"),
+                       bg=T.BG_INPUT, fg=T.ACCENT_BLUE,
+                       buttonbackground=T.BG_SURFACE2,
+                       relief="flat", bd=0, highlightthickness=0,
+                       justify="center")
+        w.delete(0, "end")
+        w.insert(0, f"{val:02d}" if width <= 3 else str(val))
+        return w
+
+    def _time_pair(self, parent: tk.Frame,
+                   h: int, m: int) -> tuple[tk.Spinbox, tk.Spinbox]:
+        wh = self._spin(parent, 0, 23, h)
+        wh.pack(side="left")
+        tk.Label(parent, text=":", bg=T.BG_SURFACE2,
+                 fg=T.TEXT_MUTED2, font=("Segoe UI", 10, "bold")).pack(side="left")
+        wm = self._spin(parent, 0, 59, m, step=5)
+        wm.pack(side="left")
+        return wh, wm
+
+    def _date_triple(self, parent: tk.Frame,
+                     dt: datetime) -> tuple:
+        wd = self._spin(parent, 1, 31, dt.day)
+        wd.pack(side="left")
+        tk.Label(parent, text="/", bg=T.BG_SURFACE2,
+                 fg=T.TEXT_MUTED2, font=("Segoe UI", 10)).pack(side="left", padx=2)
+        wm = ttk.Combobox(parent, values=self._MONTHS, width=4,
+                          font=("Segoe UI", 9), state="readonly")
+        wm.current(dt.month - 1)
+        wm.pack(side="left", padx=2)
+        tk.Label(parent, text="/", bg=T.BG_SURFACE2,
+                 fg=T.TEXT_MUTED2, font=("Segoe UI", 10)).pack(side="left", padx=2)
+        wy = self._spin(parent, 2020, 2099, dt.year, width=5)
+        wy.pack(side="left")
+        return wd, wm, wy
+
+    def _card_row(self, parent: tk.Frame,
+                  label: str, sub: str = "") -> tk.Frame:
+        card = tk.Frame(parent, bg=T.BG_SURFACE2)
+        card.pack(fill="x", padx=20, pady=2)
+        txt = tk.Frame(card, bg=T.BG_SURFACE2)
+        txt.pack(side="left", padx=14, pady=8)
+        tk.Label(txt, text=label, font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY).pack(anchor="w")
+        if sub:
+            tk.Label(txt, text=sub, font=("Segoe UI", 7),
+                     bg=T.BG_SURFACE2, fg=T.TEXT_MUTED2).pack(anchor="w")
+        right = tk.Frame(card, bg=T.BG_SURFACE2)
+        right.pack(side="right", padx=14, pady=6)
+        return right
+
+    # ── Build ──────────────────────────────────────────────────────────────────
+
+    def _build(self) -> None:
+        task = self._task
+
+        # Scrollable canvas
+        canvas = tk.Canvas(self._top, bg=T.BG_BASE, bd=0, highlightthickness=0)
+        sb = tk.Scrollbar(self._top, orient="vertical", command=canvas.yview,
+                          bg=T.BG_SURFACE2, troughcolor=T.BG_BASE,
+                          width=6, relief="flat", bd=0, highlightthickness=0)
+        inner = tk.Frame(canvas, bg=T.BG_BASE)
+        wid = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>",
+                   lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfig(wid, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.bind("<MouseWheel>",
+                    lambda e: canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        p = inner
+
+        # ── Título + descripción ───────────────────────────────────────────────
+        self._section(p, "Tarea")
+
+        tw = tk.Frame(p, bg=T.BORDER)
+        tw.pack(fill="x", padx=20, pady=(0, 2))
+        self._title_var = tk.StringVar(value=task.title)
+        te = tk.Entry(tw, textvariable=self._title_var,
+                      font=("Segoe UI", 11, "bold"),
+                      bg=T.BG_INPUT, fg=T.TEXT_PRIMARY,
+                      insertbackground=T.ACCENT_BLUE,
+                      relief="flat", bd=0, highlightthickness=0)
+        te.pack(fill="x", padx=1, pady=1, ipady=7)
+        te.bind("<FocusIn>",  lambda e: tw.config(bg=T.BORDER_FOCUS))
+        te.bind("<FocusOut>", lambda e: tw.config(bg=T.BORDER))
+
+        dw = tk.Frame(p, bg=T.BORDER)
+        dw.pack(fill="x", padx=20, pady=(0, 4))
+        self._desc = tk.Text(dw, font=("Segoe UI", 9),
+                             bg=T.BG_INPUT, fg=T.TEXT_PRIMARY,
+                             insertbackground=T.ACCENT_BLUE,
+                             relief="flat", bd=0, highlightthickness=0,
+                             height=3, wrap="word")
+        self._desc.insert("1.0", task.description or "")
+        self._desc.pack(fill="x", padx=1, pady=1, ipady=4)
+        self._desc.bind("<FocusIn>",  lambda e: dw.config(bg=T.BORDER_FOCUS))
+        self._desc.bind("<FocusOut>", lambda e: dw.config(bg=T.BORDER))
+
+        # ── Fecha ──────────────────────────────────────────────────────────────
+        self._section(p, "Fecha y hora")
+
+        r = self._card_row(p, "Fecha")
+        self._dd, self._dm, self._dy = self._date_triple(r, task.date)
+
+        # Hora inicio
+        r2 = self._card_row(p, "Hora inicio", "Activa con el checkbox")
+        self._st_on = tk.BooleanVar(value=task.start_time is not None)
+        tk.Checkbutton(r2, variable=self._st_on, bg=T.BG_SURFACE2,
+                       selectcolor=T.BG_INPUT, relief="flat", bd=0,
+                       cursor="hand2",
+                       command=self._update_times).pack(side="left", padx=(0, 8))
+        sh = task.start_time.hour   if task.start_time else 9
+        sm = task.start_time.minute if task.start_time else 0
+        self._sh, self._sm = self._time_pair(r2, sh, sm)
+
+        # Hora fin
+        r3 = self._card_row(p, "Hora fin", "Activa con el checkbox")
+        self._et_on = tk.BooleanVar(value=task.end_time is not None)
+        tk.Checkbutton(r3, variable=self._et_on, bg=T.BG_SURFACE2,
+                       selectcolor=T.BG_INPUT, relief="flat", bd=0,
+                       cursor="hand2",
+                       command=self._update_times).pack(side="left", padx=(0, 8))
+        eh = task.end_time.hour   if task.end_time else 10
+        em = task.end_time.minute if task.end_time else 0
+        self._eh, self._em = self._time_pair(r3, eh, em)
+        self._update_times()
+
+        # ── Repetición ─────────────────────────────────────────────────────────
+        self._section(p, "Repetición")
+
+        rec = task.recurrence
+        self._rec_on = tk.BooleanVar(value=rec is not None)
+
+        rec_card = tk.Frame(p, bg=T.BG_SURFACE2)
+        rec_card.pack(fill="x", padx=20, pady=2)
+        tk.Label(rec_card, text="¿Se repite?", font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                 padx=14, pady=10).pack(side="left")
+        tk.Checkbutton(rec_card, variable=self._rec_on,
+                       bg=T.BG_SURFACE2, selectcolor=T.BG_INPUT,
+                       relief="flat", bd=0, cursor="hand2",
+                       command=self._update_rec).pack(side="right", padx=14)
+
+        # Contenedor de opciones de repetición
+        self._rec_opts = tk.Frame(p, bg=T.BG_BASE)
+        self._rec_opts.pack(fill="x")
+
+        # Tipo de repetición
+        self._rtype = tk.IntVar(value=int(rec.repeat_type) if rec else 0)
+        rt = self._card_row(self._rec_opts, "Tipo")
+        for i, lbl in enumerate(["Diario", "Semanal", "Mensual", "Anual"]):
+            tk.Radiobutton(rt, text=lbl, variable=self._rtype, value=i,
+                           font=("Segoe UI", 9),
+                           bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                           selectcolor=T.BG_SURFACE2,
+                           activebackground=T.BG_SURFACE2,
+                           activeforeground=T.ACCENT_BLUE,
+                           relief="flat", bd=0, cursor="hand2",
+                           command=self._update_rtype).pack(side="left", padx=(0, 8))
+
+        # Intervalo
+        self._interval = tk.IntVar(value=rec.interval if rec else 1)
+        ri = self._card_row(self._rec_opts, "Cada")
+        intv = tk.Spinbox(ri, from_=1, to=99, textvariable=self._interval,
+                          width=4, font=("Segoe UI", 10, "bold"),
+                          bg=T.BG_INPUT, fg=T.ACCENT_BLUE,
+                          buttonbackground=T.BG_SURFACE2,
+                          relief="flat", bd=0, highlightthickness=0,
+                          justify="center")
+        intv.pack(side="left", padx=(0, 6))
+        self._unit_lbl = tk.Label(ri, text="día(s)", font=("Segoe UI", 9),
+                                  bg=T.BG_SURFACE2, fg=T.TEXT_MUTED2)
+        self._unit_lbl.pack(side="left")
+
+        # Días a omitir (solo semanal)
+        self._skip_card = tk.Frame(self._rec_opts, bg=T.BG_SURFACE2)
+        self._skip_card.pack(fill="x", padx=20, pady=2)
+        tk.Label(self._skip_card, text="Omitir días", font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                 padx=14, pady=8).pack(side="left")
+        skip_r = tk.Frame(self._skip_card, bg=T.BG_SURFACE2)
+        skip_r.pack(side="right", padx=14, pady=6)
+        skip_days = rec.skip_days if rec else []
+        self._skip_vars: List[tk.BooleanVar] = []
+        for i, day in enumerate(["L", "M", "X", "J", "V", "S", "D"]):
+            v = tk.BooleanVar(value=i in skip_days)
+            self._skip_vars.append(v)
+            tk.Checkbutton(skip_r, text=day, variable=v,
+                           font=("Segoe UI", 8, "bold"),
+                           bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                           selectcolor=T.ACCENT_BLUE,
+                           activebackground=T.BG_SURFACE2,
+                           relief="flat", bd=0, cursor="hand2").pack(
+                side="left", padx=2)
+
+        # Condición de fin
+        self._end_type = tk.IntVar(value=int(rec.end_type) if rec else 0)
+        re = self._card_row(self._rec_opts, "Finaliza")
+        for i, lbl in enumerate(["Nunca", "Tras N veces", "En fecha"]):
+            tk.Radiobutton(re, text=lbl, variable=self._end_type, value=i,
+                           font=("Segoe UI", 9),
+                           bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                           selectcolor=T.BG_SURFACE2,
+                           activebackground=T.BG_SURFACE2,
+                           activeforeground=T.ACCENT_BLUE,
+                           relief="flat", bd=0, cursor="hand2",
+                           command=self._update_end).pack(side="left", padx=(0, 8))
+
+        # N ocurrencias
+        self._occ_card = tk.Frame(self._rec_opts, bg=T.BG_SURFACE2)
+        self._occ_card.pack(fill="x", padx=20, pady=2)
+        tk.Label(self._occ_card, text="Número de veces", font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                 padx=14, pady=8).pack(side="left")
+        self._occ_var = tk.IntVar(
+            value=rec.occurrences if (rec and rec.occurrences) else 5)
+        tk.Spinbox(self._occ_card, from_=1, to=999, textvariable=self._occ_var,
+                   width=5, font=("Segoe UI", 10, "bold"),
+                   bg=T.BG_INPUT, fg=T.ACCENT_BLUE,
+                   buttonbackground=T.BG_SURFACE2,
+                   relief="flat", bd=0, highlightthickness=0,
+                   justify="center").pack(side="right", padx=14, pady=6)
+
+        # Fecha límite
+        ed = rec.end_date if (rec and rec.end_date) else datetime.now()
+        self._enddate_card = tk.Frame(self._rec_opts, bg=T.BG_SURFACE2)
+        self._enddate_card.pack(fill="x", padx=20, pady=2)
+        tk.Label(self._enddate_card, text="Fecha límite", font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                 padx=14, pady=8).pack(side="left")
+        ed_r = tk.Frame(self._enddate_card, bg=T.BG_SURFACE2)
+        ed_r.pack(side="right", padx=14, pady=6)
+        self._ed_d, self._ed_m, self._ed_y = self._date_triple(ed_r, ed)
+
+        # Estado inicial
+        self._update_rec()
+        self._update_rtype()
+        self._update_end()
+
+        # ── Botones (fuera del canvas, fijos abajo) ────────────────────────────
+        btn_row = tk.Frame(self._top, bg=T.BG_BASE)
+        btn_row.pack(fill="x", side="bottom", padx=20, pady=12)
+        tk.Frame(self._top, bg=T.SEPARATOR, height=1).pack(
+            fill="x", side="bottom")
+
+        tk.Button(btn_row, text="Cancelar", font=("Segoe UI", 9),
+                  bg=T.BG_SURFACE2, fg=T.TEXT_MUTED,
+                  relief="flat", bd=0, cursor="hand2",
+                  padx=16, pady=8,
+                  command=self._top.destroy).pack(side="left")
+
+        save_wrap = tk.Frame(btn_row, bg=T.ACCENT_BLUE)
+        save_wrap.pack(side="right")
+        save_btn = tk.Button(save_wrap, text="  Guardar cambios  ",
+                             font=("Segoe UI", 9, "bold"),
+                             bg=T.BG_SURFACE2, fg=T.ACCENT_BLUE,
+                             relief="flat", bd=0, cursor="hand2",
+                             padx=6, pady=8, command=self._save)
+        save_btn.pack(padx=1, pady=1)
+        save_btn.bind("<Enter>", lambda e: save_btn.config(bg=T.BORDER))
+        save_btn.bind("<Leave>", lambda e: save_btn.config(bg=T.BG_SURFACE2))
+
+    # ── Estado dinámico ────────────────────────────────────────────────────────
+
+    def _update_times(self) -> None:
+        for w in [self._sh, self._sm]:
+            w.config(state="normal" if self._st_on.get() else "disabled")
+        for w in [self._eh, self._em]:
+            w.config(state="normal" if self._et_on.get() else "disabled")
+
+    def _update_rec(self) -> None:
+        if self._rec_on.get():
+            self._rec_opts.pack(fill="x")
+        else:
+            self._rec_opts.pack_forget()
+
+    def _update_rtype(self) -> None:
+        units = ["día(s)", "semana(s)", "mes(es)", "año(s)"]
+        self._unit_lbl.config(text=units[self._rtype.get()])
+        if self._rtype.get() == 1:  # semanal → mostrar días
+            self._skip_card.pack(fill="x", padx=20, pady=2)
+        else:
+            self._skip_card.pack_forget()
+
+    def _update_end(self) -> None:
+        et = self._end_type.get()
+        if et == 1:
+            self._occ_card.pack(fill="x", padx=20, pady=2)
+            self._enddate_card.pack_forget()
+        elif et == 2:
+            self._enddate_card.pack(fill="x", padx=20, pady=2)
+            self._occ_card.pack_forget()
+        else:
+            self._occ_card.pack_forget()
+            self._enddate_card.pack_forget()
+
+    # ── Parseo y guardado ──────────────────────────────────────────────────────
+
+    def _parse_date(self, wd, wm, wy) -> datetime:
+        day   = int(wd.get())
+        month = self._MONTHS.index(wm.get()) + 1
+        year  = int(wy.get())
+        return datetime(year, month, day)
+
+    def _save(self) -> None:
+        title = self._title_var.get().strip()
+        if not title:
+            messagebox.showwarning("Error", "El título no puede estar vacío.",
+                                   parent=self._top)
+            return
+
+        try:
+            task_date = self._parse_date(self._dd, self._dm, self._dy)
+        except ValueError:
+            messagebox.showwarning("Error", "Fecha inválida.", parent=self._top)
+            return
+
+        desc = self._desc.get("1.0", "end-1c").strip()
+
+        start_time: Optional[datetime] = None
+        end_time:   Optional[datetime] = None
+        if self._st_on.get():
+            start_time = task_date.replace(
+                hour=int(self._sh.get()), minute=int(self._sm.get()),
+                second=0, microsecond=0)
+        if self._et_on.get():
+            end_time = task_date.replace(
+                hour=int(self._eh.get()), minute=int(self._em.get()),
+                second=0, microsecond=0)
+
+        recurrence: Optional[RecurrenceRule] = None
+        if self._rec_on.get():
+            end_t = EndType(self._end_type.get())
+            end_date   = None
+            occurrences = None
+            if end_t == EndType.ON_DATE:
+                try:
+                    end_date = self._parse_date(self._ed_d, self._ed_m, self._ed_y)
+                except ValueError:
+                    messagebox.showwarning("Error", "Fecha límite inválida.",
+                                           parent=self._top)
+                    return
+            elif end_t == EndType.AFTER_OCCURRENCES:
+                occurrences = max(1, int(self._occ_var.get()))
+
+            recurrence = RecurrenceRule(
+                repeat_type=RepeatType(self._rtype.get()),
+                interval=max(1, int(self._interval.get())),
+                skip_days=[i for i, v in enumerate(self._skip_vars) if v.get()],
+                end_type=end_t,
+                occurrences=occurrences,
+                end_date=end_date,
+            )
+
+        updated = Task.from_dict({
+            **self._task.to_dict(),
+            "title":       title,
+            "description": desc,
+            "date":        task_date.isoformat(),
+            "start_time":  start_time.isoformat() if start_time else None,
+            "end_time":    end_time.isoformat()   if end_time   else None,
+            "recurrence":  recurrence.to_dict()   if recurrence else None,
+        })
+
+        self._repo.save_task(updated)
+        self._on_save()
+        self._top.destroy()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MainWindow
 # ══════════════════════════════════════════════════════════════════════════════
 class MainWindow:
@@ -121,6 +669,9 @@ class MainWindow:
         self._build()
         self._fade_in()
         self._refresh()
+        # Pull inicial del backend (equivalente a _pullFromServer en Flutter)
+        threading.Thread(target=self._startup_pull, daemon=True,
+                         name="focusguard-startup-pull").start()
 
     # ── Fade-in ────────────────────────────────────────────────────────────────
     def _fade_in(self, alpha: float = 0.0) -> None:
@@ -453,6 +1004,12 @@ class MainWindow:
         sel = self._tkcal.selection_get()
         self._cal_date = datetime(sel.year, sel.month, sel.day)
         self._render_cal_tasks()
+        # Pull del backend para la fecha seleccionada
+        from . import config as cfg_ref
+        if cfg_ref.is_api_sync_enabled():
+            date_str = self._cal_date.strftime("%Y-%m-%d")
+            threading.Thread(target=self._pull_date_async, args=(date_str,),
+                             daemon=True, name="focusguard-date-pull").start()
 
     # ══════════════════════════════════════════════════════════════════════════
     # TAB: SMART
@@ -670,6 +1227,20 @@ class MainWindow:
             w = widget_fn(r)
             w.pack(side="right", padx=14, pady=8)
 
+        # ── Banner de advertencia: sin privilegios de administrador (#3) ─────────
+        if not cfg.is_running_as_admin():
+            warn_bar = tk.Frame(inner, bg="#5c1d1d")
+            warn_bar.pack(fill="x", padx=20, pady=(8, 4))
+            tk.Label(
+                warn_bar,
+                text="  Sin privilegios de administrador — el bloqueador puede no "
+                     "poder terminar ciertos procesos. Reinicia como administrador "
+                     "para máxima efectividad.",
+                font=("Segoe UI", 8),
+                bg="#5c1d1d", fg="#ffb3b3",
+                wraplength=480, justify="left", anchor="w",
+            ).pack(fill="x", padx=10, pady=6)
+
         # ── Apariencia ─────────────────────────────────────────────────────────
         sec("Apariencia")
 
@@ -744,6 +1315,108 @@ class MainWindow:
         wrap.pack(side="left", fill="x", expand=True)
         self._make_add_btn(add_row, self._add_app).pack(
             side="right", padx=(8, 0))
+
+        # ── Sincronización con el Dashboard ───────────────────────────────────
+        sec("Sincronización con el Dashboard")
+
+        # Toggle on/off
+        def make_sync_toggle(parent):
+            var = tk.BooleanVar(value=cfg.is_api_sync_enabled())
+            def _save(*_):
+                cfg.set_api_sync_enabled(var.get())
+            chk = tk.Checkbutton(parent, variable=var,
+                                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY,
+                                 selectcolor=T.BG_INPUT,
+                                 activebackground=T.BG_SURFACE2,
+                                 activeforeground=T.TEXT_PRIMARY,
+                                 relief="flat", bd=0, cursor="hand2",
+                                 command=_save)
+            return chk
+
+        row("Sincronización automática",
+            "Sube y descarga tareas del dashboard en tiempo real",
+            make_sync_toggle)
+
+        # URL del backend (fila custom para que el entry se expanda)
+        url_row = tk.Frame(inner, bg=T.BG_SURFACE2)
+        url_row.pack(fill="x", padx=20, pady=2)
+        url_txt = tk.Frame(url_row, bg=T.BG_SURFACE2)
+        url_txt.pack(side="left", padx=14, pady=10)
+        tk.Label(url_txt, text="URL del backend",
+                 font=("Segoe UI", 9),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY).pack(anchor="w")
+        tk.Label(url_txt, text="Dirección del servidor FocusFlow",
+                 font=("Segoe UI", 7),
+                 bg=T.BG_SURFACE2, fg=T.TEXT_MUTED2).pack(anchor="w")
+        url_entry_wrap = tk.Frame(url_row, bg=T.BORDER)
+        url_entry_wrap.pack(side="right", padx=14, pady=8)
+        self._url_entry = tk.Entry(url_entry_wrap, font=("Segoe UI", 9),
+                                   bg=T.BG_INPUT, fg=T.TEXT_PRIMARY,
+                                   insertbackground=T.ACCENT_BLUE,
+                                   relief="flat", bd=0, highlightthickness=0,
+                                   justify="center", width=28)
+        self._url_entry.insert(0, cfg.get_api_base_url())
+        self._url_entry.pack(padx=1, pady=1, ipady=5)
+        self._url_entry.bind("<FocusIn>",
+            lambda e: url_entry_wrap.config(bg=T.BORDER_FOCUS))
+        def _on_url_change() -> None:
+            url = self._url_entry.get()
+            cfg.set_api_base_url(url)
+            # Mostrar/ocultar warning HTTPS (#2)
+            is_http  = url.startswith("http://")
+            is_local = any(url.startswith(f"http://{h}")
+                           for h in ("localhost", "127.", "0.0.0.0"))
+            if is_http and not is_local:
+                self._https_warn_lbl.config(
+                    text="  Conexión sin cifrado (HTTP). Se recomienda HTTPS.")
+            else:
+                self._https_warn_lbl.config(text="")
+
+        self._url_entry.bind("<FocusOut>",
+            lambda e: (url_entry_wrap.config(bg=T.BORDER), _on_url_change()))
+        self._url_entry.bind("<Return>",
+            lambda e: _on_url_change())
+
+        # Warning HTTPS (#2)
+        initial_url = cfg.get_api_base_url()
+        _is_http  = initial_url.startswith("http://")
+        _is_local = any(initial_url.startswith(f"http://{h}")
+                        for h in ("localhost", "127.", "0.0.0.0"))
+        self._https_warn_lbl = tk.Label(
+            inner,
+            text="  Conexión sin cifrado (HTTP). Se recomienda HTTPS."
+                 if (_is_http and not _is_local) else "",
+            font=("Segoe UI", 7),
+            bg=T.BG_BASE, fg=T.ACCENT_GOLD,
+            anchor="w",
+        )
+        self._https_warn_lbl.pack(fill="x", padx=20, pady=(0, 2))
+
+        # Botón + estado
+        sync_row = tk.Frame(inner, bg=T.BG_BASE)
+        sync_row.pack(fill="x", padx=20, pady=(4, 4))
+        self._sync_status_lbl = tk.Label(sync_row, text="",
+                                         font=("Segoe UI", 8),
+                                         bg=T.BG_BASE, fg=T.TEXT_MUTED2)
+        self._sync_status_lbl.pack(side="left", anchor="w")
+        sync_wrap = tk.Frame(sync_row, bg=T.ACCENT_BLUE)
+        sync_wrap.pack(side="right")
+        sync_btn = tk.Button(sync_wrap, text="  ↕  Sincronizar ahora  ",
+                             font=("Segoe UI", 9, "bold"),
+                             bg=T.BG_SURFACE2, fg=T.ACCENT_BLUE,
+                             relief="flat", bd=0, cursor="hand2",
+                             padx=6, pady=5,
+                             command=self._do_sync_now)
+        sync_btn.pack(padx=1, pady=1)
+        sync_btn.bind("<Enter>", lambda e: sync_btn.config(bg=T.BORDER))
+        sync_btn.bind("<Leave>", lambda e: sync_btn.config(bg=T.BG_SURFACE2))
+
+        # ── Cuenta ─────────────────────────────────────────────────────────────
+        sec("Cuenta")
+
+        self._acct_frame = tk.Frame(inner, bg=T.BG_BASE)
+        self._acct_frame.pack(fill="x", padx=20, pady=(0, 24))
+        self._refresh_acct_section()
 
     # ══════════════════════════════════════════════════════════════════════════
     # RENDER helpers
@@ -902,6 +1575,17 @@ class MainWindow:
         del_btn.bind("<Leave>",
                      lambda e: e.widget.config(fg=T.TEXT_MUTED))
 
+        edit_btn = tk.Label(card, text="✏", font=("Segoe UI", 10),
+                            bg=T.BG_SURFACE2, fg=T.TEXT_MUTED,
+                            cursor="hand2", padx=6)
+        edit_btn.pack(side="right", anchor="center")
+        edit_btn.bind("<Button-1>",
+                      lambda e, t=task: self._open_edit(t))
+        edit_btn.bind("<Enter>",
+                      lambda e: e.widget.config(fg=T.ACCENT_BLUE))
+        edit_btn.bind("<Leave>",
+                      lambda e: e.widget.config(fg=T.TEXT_MUTED))
+
         # Hover
         for w in [card, info]:
             w.bind("<Enter>",
@@ -939,6 +1623,123 @@ class MainWindow:
                  bg=T.BG_BASE, fg=T.TEXT_MUTED).pack(pady=(4, 0))
 
     # ══════════════════════════════════════════════════════════════════════════
+    # SYNC helpers
+    # ══════════════════════════════════════════════════════════════════════════
+    def _startup_pull(self) -> None:
+        """Pull inicial del backend al arrancar (equivalente a _pullFromServer en Flutter)."""
+        try:
+            n = self._repo.pull_from_api()
+            if n:
+                self.root.after(0, lambda: self._schedule_refresh(True))
+        except Exception as e:
+            log.warning(f"Startup pull error: {e}")
+
+    def _pull_date_async(self, date_str: str) -> None:
+        """Descarga tareas del backend para una fecha y refresca el calendario."""
+        try:
+            n = self._repo.pull_from_api(date_str=date_str)
+            if n:
+                self.root.after(0, self._render_cal_tasks)
+        except Exception as e:
+            log.warning(f"Date pull error: {e}")
+
+    def _refresh_acct_section(self) -> None:
+        """Actualiza el bloque de Cuenta en Ajustes según el estado de sesión."""
+        for w in self._acct_frame.winfo_children():
+            w.destroy()
+
+        username = cfg.get_api_username()
+        token    = cfg.get_api_token()
+        logged   = bool(token and username)
+
+        card = tk.Frame(self._acct_frame, bg=T.BG_SURFACE2)
+        card.pack(fill="x", pady=2)
+
+        if logged:
+            # Estado: conectado
+            info = tk.Frame(card, bg=T.BG_SURFACE2)
+            info.pack(side="left", padx=14, pady=10)
+            tk.Label(info, text=f"Conectado como  {username}",
+                     font=("Segoe UI", 9, "bold"),
+                     bg=T.BG_SURFACE2, fg=T.ACCENT_GREEN).pack(anchor="w")
+            tk.Label(info, text="Token guardado en Windows Credential Manager",
+                     font=("Segoe UI", 7),
+                     bg=T.BG_SURFACE2, fg=T.TEXT_MUTED2).pack(anchor="w")
+            logout_btn = tk.Button(card, text="Cerrar sesión",
+                                   font=("Segoe UI", 8),
+                                   bg=T.BG_SURFACE2, fg=T.ACCENT_RED,
+                                   relief="flat", bd=0, cursor="hand2",
+                                   padx=12, pady=8,
+                                   command=self._do_logout)
+            logout_btn.pack(side="right", padx=14)
+        else:
+            # Estado: no conectado
+            info = tk.Frame(card, bg=T.BG_SURFACE2)
+            info.pack(side="left", padx=14, pady=10)
+            tk.Label(info, text="No has iniciado sesión",
+                     font=("Segoe UI", 9),
+                     bg=T.BG_SURFACE2, fg=T.TEXT_PRIMARY).pack(anchor="w")
+            tk.Label(info, text="Inicia sesión para sincronizar con autenticación",
+                     font=("Segoe UI", 7),
+                     bg=T.BG_SURFACE2, fg=T.TEXT_MUTED2).pack(anchor="w")
+            login_wrap = tk.Frame(card, bg=T.ACCENT_BLUE)
+            login_wrap.pack(side="right", padx=14, pady=8)
+            login_btn = tk.Button(login_wrap, text="  Iniciar sesión  ",
+                                  font=("Segoe UI", 8, "bold"),
+                                  bg=T.BG_SURFACE2, fg=T.ACCENT_BLUE,
+                                  relief="flat", bd=0, cursor="hand2",
+                                  padx=6, pady=5,
+                                  command=self._open_login_dialog)
+            login_btn.pack(padx=1, pady=1)
+            login_btn.bind("<Enter>", lambda e: login_btn.config(bg=T.BORDER))
+            login_btn.bind("<Leave>", lambda e: login_btn.config(bg=T.BG_SURFACE2))
+
+    def _open_login_dialog(self) -> None:
+        LoginDialog(self.root, on_success=self._on_login_success)
+
+    def _on_login_success(self, username: str) -> None:
+        self._refresh_acct_section()
+        self._sync_status_lbl.config(
+            text=f"Sesión iniciada como {username}. Sincronizando…",
+            fg=T.ACCENT_GREEN,
+        )
+        # Sync inmediato con el nuevo token
+        self._do_sync_now()
+
+    def _do_logout(self) -> None:
+        cfg.delete_api_token()
+        cfg.set_api_username("")
+        self._refresh_acct_section()
+        if hasattr(self, "_sync_status_lbl"):
+            self._sync_status_lbl.config(text="Sesión cerrada.", fg=T.TEXT_MUTED2)
+        log.info("Sesión cerrada por el usuario.")
+
+    def _do_sync_now(self) -> None:
+        """Sincronización manual: push all + pull all."""
+        if not hasattr(self, "_sync_status_lbl"):
+            return
+        self._sync_status_lbl.config(text="Sincronizando…", fg=T.TEXT_MUTED2)
+
+        def _sync():
+            try:
+                push_result = self._repo.push_to_api()
+                n = self._repo.pull_from_api()
+                created = push_result.get("created", 0)
+                updated = push_result.get("updated", 0)
+                msg = (f"Sincronizado · {created} creadas, {updated} actualizadas, "
+                       f"{n} recibidas")
+                self.root.after(0, lambda: self._sync_status_lbl.config(
+                    text=msg, fg=T.ACCENT_GREEN))
+                self.root.after(0, lambda: self._schedule_refresh(True))
+            except Exception as e:
+                err = str(e)
+                self.root.after(0, lambda: self._sync_status_lbl.config(
+                    text=f"Error: {err}", fg=T.ACCENT_RED))
+
+        threading.Thread(target=_sync, daemon=True,
+                         name="focusguard-manual-sync").start()
+
+    # ══════════════════════════════════════════════════════════════════════════
     # TASK ACTIONS
     # ══════════════════════════════════════════════════════════════════════════
     def _do_start(self, task: Task) -> None:
@@ -973,6 +1774,12 @@ class MainWindow:
             {**task.to_dict(), "status": int(TaskStatus.PENDING)})
         self._repo.save_task(updated)
         self._schedule_refresh(immediate=True)
+
+    def _open_edit(self, task: Task) -> None:
+        TaskEditDialog(
+            self.root, task, self._repo,
+            on_save=lambda: self._schedule_refresh(immediate=True),
+        )
 
     def _remove_task(self, task: Task) -> None:
         if messagebox.askyesno("Eliminar tarea",

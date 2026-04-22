@@ -42,6 +42,9 @@ dependencies:
   # HTTP client for CMS backend communication
   http: ^1.2.2
 
+  # Secure storage for sensitive data (tokens)
+  flutter_secure_storage: ^10.0.0
+
   # Typography
   google_fonts: ^6.2.1
 

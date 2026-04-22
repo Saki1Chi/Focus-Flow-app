@@ -12,7 +12,10 @@ class SettingsState {
   final bool darkMode;
   final bool onboardingDone;
   final int completedBlocks;
+  final int currentStreak;
+  final String? lastStreakDate; // 'yyyy-MM-dd'
   final List<String> blockedApps;
+  final String apiBaseUrl;
 
   const SettingsState({
     this.unlockDuration = AppConstants.defaultUnlockDuration,
@@ -23,7 +26,10 @@ class SettingsState {
     this.darkMode = false,
     this.onboardingDone = false,
     this.completedBlocks = 0,
+    this.currentStreak = 0,
+    this.lastStreakDate,
     this.blockedApps = const [],
+    this.apiBaseUrl = AppConstants.apiBaseUrl,
   });
 
   Color get accentColor {
@@ -44,7 +50,10 @@ class SettingsState {
     bool? darkMode,
     bool? onboardingDone,
     int? completedBlocks,
+    int? currentStreak,
+    String? lastStreakDate,
     List<String>? blockedApps,
+    String? apiBaseUrl,
   }) =>
       SettingsState(
         unlockDuration: unlockDuration ?? this.unlockDuration,
@@ -55,7 +64,10 @@ class SettingsState {
         darkMode: darkMode ?? this.darkMode,
         onboardingDone: onboardingDone ?? this.onboardingDone,
         completedBlocks: completedBlocks ?? this.completedBlocks,
+        currentStreak: currentStreak ?? this.currentStreak,
+        lastStreakDate: lastStreakDate ?? this.lastStreakDate,
         blockedApps: blockedApps ?? this.blockedApps,
+        apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
       );
 }
 
@@ -76,8 +88,17 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       darkMode: _box.get(AppConstants.keyDarkMode, defaultValue: false),
       onboardingDone: _box.get(AppConstants.keyOnboardingDone, defaultValue: false),
       completedBlocks: _box.get(AppConstants.keyCompletedBlocks, defaultValue: 0),
+      currentStreak: _box.get(AppConstants.keyCurrentStreak, defaultValue: 0),
+      lastStreakDate: _box.get(AppConstants.keyLastStreakDate) as String?,
       blockedApps: List<String>.from(_box.get('blocked_apps', defaultValue: <String>[])),
+      apiBaseUrl: _box.get(AppConstants.keyApiBaseUrl, defaultValue: AppConstants.apiBaseUrl) as String,
     );
+  }
+
+  Future<void> setApiBaseUrl(String url) async {
+    final trimmed = url.trim().replaceAll(RegExp(r'/+$'), '');
+    await _box.put(AppConstants.keyApiBaseUrl, trimmed);
+    state = state.copyWith(apiBaseUrl: trimmed);
   }
 
   Future<void> setUnlockDuration(int minutes) async {
@@ -120,6 +141,30 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(blockedApps: apps);
   }
 
+  /// Call once per completed task to update the daily streak.
+  /// Returns the new streak value.
+  Future<int> recordTaskCompletion() async {
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+    // Mismo día: no cambia nada
+    if (state.lastStreakDate == todayStr) return state.currentStreak;
+
+    final newStreak = computeStreak(
+      currentStreak: state.currentStreak,
+      lastStreakDate: state.lastStreakDate,
+      todayStr: todayStr,
+    );
+
+    // Es un día nuevo: resetear el contador diario de bloques
+    await _box.put(AppConstants.keyCompletedBlocks, 0);
+    await _box.put(AppConstants.keyCurrentStreak, newStreak);
+    await _box.put(AppConstants.keyLastStreakDate, todayStr);
+    state = state.copyWith(currentStreak: newStreak, lastStreakDate: todayStr, completedBlocks: 0);
+    return newStreak;
+  }
+
   Future<void> incrementCompletedBlocks() async {
     final newVal = state.completedBlocks + 1;
     await _box.put(AppConstants.keyCompletedBlocks, newVal);
@@ -135,3 +180,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   (ref) => SettingsNotifier(),
 );
+
+/// Calcula el nuevo valor de racha a partir del estado anterior.
+/// Función pura sin efectos secundarios — fácil de testear.
+///
+/// - [lastStreakDate]: fecha de la última tarea completada ('yyyy-MM-dd') o null.
+/// - [todayStr]: fecha de hoy en el mismo formato.
+/// - [currentStreak]: valor actual de la racha.
+int computeStreak({
+  required int currentStreak,
+  required String? lastStreakDate,
+  required String todayStr,
+}) {
+  if (lastStreakDate == null) return 1;
+  if (lastStreakDate == todayStr) return currentStreak; // ya registrado hoy
+  final lastDate = DateTime.parse(lastStreakDate);
+  final today = DateTime.parse(todayStr);
+  final diff = today.difference(lastDate).inDays;
+  return diff == 1 ? currentStreak + 1 : 1;
+}

@@ -54,7 +54,6 @@ class _SmartModeScreenState extends ConsumerState<SmartModeScreen> {
   @override
   Widget build(BuildContext context) {
     final accent = ref.watch(settingsProvider).accentColor;
-    final tokens = Theme.of(context).extension<MinimalTheme>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

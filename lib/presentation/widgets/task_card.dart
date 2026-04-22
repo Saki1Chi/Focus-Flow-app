@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/task_model.dart';
 import '../providers/task_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/category_provider.dart';
 
 class TaskCard extends ConsumerStatefulWidget {
   final Task task;
@@ -51,6 +52,7 @@ class _TaskCardState extends ConsumerState<TaskCard>
     final accent      = ref.watch(settingsProvider).accentColor;
     final isDark      = Theme.of(context).brightness == Brightness.dark;
     final textTheme   = Theme.of(context).textTheme;
+    final category    = ref.watch(categoryProvider).byId(widget.task.categoryId);
 
     final isInProgress = widget.task.status == TaskStatus.inProgress;
     final isCompleted  = widget.task.status == TaskStatus.completed;
@@ -219,6 +221,42 @@ class _TaskCardState extends ConsumerState<TaskCard>
                                         : Colors.black.withValues(alpha: 0.22),
                                   ),
                                 ),
+                              if (category != null) ...[
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: category.colorValue
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: category.colorValue
+                                          .withValues(alpha: 0.35),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: category.colorValue,
+                                        radius: 4,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        category.name,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: category.colorValue,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
 
@@ -422,7 +460,18 @@ class _ActionButtons extends ConsumerWidget {
             label: 'Done',
             icon: Icons.check_rounded,
             color: const Color(0xFF22C55E),
-            onTap: () => notifier.markCompleted(task.id),
+            onTap: () {
+              notifier.markCompleted(task.id).then((ok) {
+                if (!ok && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Completa la tarea anterior primero'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              });
+            },
             isDark: isDark,
           ),
           const SizedBox(width: 8),

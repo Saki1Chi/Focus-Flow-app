@@ -18,6 +18,7 @@ class Task {
   int dayOrder; // sequential order within the day
   String? parentId; // for recurring instances
   bool isRecurringParent;
+  int? categoryId; // backend category FK (nullable)
 
   Task({
     required this.id,
@@ -33,6 +34,7 @@ class Task {
     this.dayOrder = 0,
     this.parentId,
     this.isRecurringParent = false,
+    this.categoryId,
   });
 
   Task copyWith({
@@ -49,6 +51,8 @@ class Task {
     int? dayOrder,
     String? parentId,
     bool? isRecurringParent,
+    int? categoryId,
+    bool clearCategory = false,
   }) {
     return Task(
       id: id ?? this.id,
@@ -64,6 +68,7 @@ class Task {
       dayOrder: dayOrder ?? this.dayOrder,
       parentId: parentId ?? this.parentId,
       isRecurringParent: isRecurringParent ?? this.isRecurringParent,
+      categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
     );
   }
 
@@ -81,6 +86,7 @@ class Task {
         'dayOrder': dayOrder,
         'parentId': parentId,
         'isRecurringParent': isRecurringParent,
+        'categoryId': categoryId,
       };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
@@ -99,6 +105,7 @@ class Task {
         dayOrder: json['dayOrder'] as int? ?? 0,
         parentId: json['parentId'] as String?,
         isRecurringParent: json['isRecurringParent'] as bool? ?? false,
+        categoryId: json['categoryId'] as int?,
       );
 
   String toJsonString() => jsonEncode(toJson());

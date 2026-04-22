@@ -137,21 +137,6 @@ class NeonColors {
 
 
 class AppTheme {
-  // ── Dark palette ───────────────────────────────────────────────
-  static const Color _darkBg      = Color(0xFF06060F);
-  static const Color _darkSurface = Color(0xFF0C0C1A);
-  static const Color _darkCard    = Color(0xFF0E0E1C);
-  static const Color _darkBorder  = Color(0x0FFFFFFF);
-  static const Color _darkText    = Color(0xFFF0F0FF);
-  static const Color _darkTextSub = Color(0xFF484862);
-
-  // ── Light palette ──────────────────────────────────────────────
-  static const Color _lightBg      = Color(0xFFF3F4FF);
-  static const Color _lightCard    = Color(0xFFFFFFFF);
-  static const Color _lightBorder  = Color(0x0C000000);
-  static const Color _lightText    = Color(0xFF080818);
-  static const Color _lightTextSub = Color(0xFF9898B8);
-
   // ──────────────────────────────────────────────────────────────
   static TextTheme _textTheme(Color text, Color sub) {
     return GoogleFonts.plusJakartaSansTextTheme().copyWith(

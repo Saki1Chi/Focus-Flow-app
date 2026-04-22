@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/task_model.dart';
@@ -8,23 +10,54 @@ import '../../services/app_blocker_service.dart';
 import '../../services/scheduler_service.dart';
 import '../../services/api_service.dart';
 import 'settings_provider.dart';
+import 'sync_provider.dart';
+import 'social_provider.dart';
 
 final _uuid = Uuid();
 
 class TaskNotifier extends StateNotifier<List<Task>> {
-  TaskNotifier(this._ref) : super([]) {
-    _load();
-    _pullFromServer(); // SEGUNDO CAMBIO
+  /// Las dependencias son opcionales para facilitar el testing con mocks.
+  TaskNotifier(
+    this._ref, {
+    TaskRepository? repo,
+    AlarmService? alarm,
+    AppBlockerService? blocker,
+    SchedulerService? scheduler,
+  })  : _repo = repo ?? TaskRepository(),
+        _alarm = alarm ?? AlarmService(),
+        _blocker = blocker ?? AppBlockerService(),
+        _scheduler = scheduler ?? SchedulerService(),
+        super([]) {
+    _init();
   }
 
   final Ref _ref;
-  final _repo = TaskRepository();
-  final _alarm = AlarmService();
-  final _blocker = AppBlockerService();
-  final _scheduler = SchedulerService();
+  final TaskRepository _repo;
+  final AlarmService _alarm;
+  final AppBlockerService _blocker;
+  final SchedulerService _scheduler;
 
   void _load() {
     state = _repo.getAllTasks();
+  }
+
+  /// Secuencia de arranque: carga local (síncrona) → pull servidor → expande recurrencias.
+  /// Si el servidor falla, expande igual con datos locales. Solo un camino de expansión.
+  Future<void> _init() async {
+    _load(); // UI muestra datos locales inmediatamente
+    try {
+      await refreshFromServer(); // pull + expansión en caso de éxito
+    } catch (e, st) {
+      dev.log('Sin conexión al arrancar — usando datos locales',
+          name: 'TaskNotifier', error: e, stackTrace: st);
+      await _expandInitialRecurrences();
+    }
+  }
+
+  Future<void> _expandInitialRecurrences() async {
+    try {
+      await expandRecurringTasks(DateTime.now().add(const Duration(days: 60)));
+    } catch (_) {}
   }
 
   List<Task> tasksForDate(DateTime date) {
@@ -38,24 +71,31 @@ class TaskNotifier extends StateNotifier<List<Task>> {
       ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
   }
 
-    // TERCER CAMBIO
-    Future<void> _pullFromServer() async {
-    try {
-      await refreshFromServer();
-    } catch (_) {
-      // Silencia en arranque; puedes loguear si quieres.
-    }
-  }
+  // ─── Sync helper ──────────────────────────────────────────────
 
+  void _setSyncing() =>
+      _ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
+
+  void _setSynced() =>
+      _ref.read(syncStatusProvider.notifier).state = SyncStatus.synced;
+
+  void _setOffline() =>
+      _ref.read(syncStatusProvider.notifier).state = SyncStatus.offline;
+
+  /// Fire-and-forget: runs [fn] without blocking the UI.
+  void _bgSync(Future<void> Function() fn) {
+    _setSyncing();
+    fn().then((_) => _setSynced()).catchError((_) => _setOffline());
+  }
 
   // ─── CRUD ─────────────────────────────────────────────────────
 
-  // CUARTO CAMBIO
   Future<void> refreshFromServer() async {
-    final api = ApiService();
+    final api = ApiService(baseUrl: _ref.read(settingsProvider).apiBaseUrl);
     final remote = await api.getTasks();
     await _repo.replaceAll(remote);
     state = remote;
+    await _expandInitialRecurrences();
     // Opcional: reprogramar alarmas para pendientes con hora
     final settings = _ref.read(settingsProvider);
     for (final t in remote) {
@@ -74,6 +114,8 @@ class TaskNotifier extends StateNotifier<List<Task>> {
     DateTime? endTime,
     TaskMode mode = TaskMode.calendar,
     recurrence,
+    bool isRecurringParent = false,
+    int? categoryId,
   }) async {
     final tasks = tasksForDate(date);
     final task = Task(
@@ -85,8 +127,10 @@ class TaskNotifier extends StateNotifier<List<Task>> {
       endTime: endTime,
       mode: mode,
       recurrence: recurrence,
+      isRecurringParent: isRecurringParent,
       dayOrder: tasks.length,
       status: TaskStatus.pending,
+      categoryId: categoryId,
     );
     await _repo.saveTask(task);
     state = [...state, task];
@@ -94,12 +138,21 @@ class TaskNotifier extends StateNotifier<List<Task>> {
     final settings = _ref.read(settingsProvider);
     await _alarm.scheduleTaskAlert(task, settings.alertDelayMinutes);
 
+    // Sync to backend in background
+    _bgSync(() => ApiService(baseUrl: _ref.read(settingsProvider).apiBaseUrl).createTask(task));
+
+    if (recurrence != null) {
+      await expandRecurringTasks(DateTime.now().add(const Duration(days: 60)));
+    }
+
     return task;
   }
 
   Future<void> updateTask(Task task) async {
     await _repo.saveTask(task);
     state = state.map((t) => t.id == task.id ? task : t).toList();
+    // Sync to backend in background
+    _bgSync(() => ApiService(baseUrl: _ref.read(settingsProvider).apiBaseUrl).updateTask(task));
   }
 
   Future<void> deleteTask(String id) async {
@@ -107,32 +160,30 @@ class TaskNotifier extends StateNotifier<List<Task>> {
     if (task != null) await _alarm.cancelTaskAlert(task);
     await _repo.deleteTask(id);
     state = state.where((t) => t.id != id).toList();
+    // Sync to backend in background
+    _bgSync(() => ApiService(baseUrl: _ref.read(settingsProvider).apiBaseUrl).deleteTask(id));
   }
 
   // ─── Status management ────────────────────────────────────────
 
   Future<void> markInProgress(String id) async {
-    final task = state.firstWhere((t) => t.id == id);
-    final dayTasks = tasksForDate(task.date)..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
-
-    // Sequential lock: previous task must be completed or in progress
-    final idx = dayTasks.indexWhere((t) => t.id == id);
-    if (idx > 0) {
-      final prev = dayTasks[idx - 1];
-      if (prev.status == TaskStatus.pending) return; // blocked
-    }
-
-    await updateTask(task.copyWith(status: TaskStatus.inProgress));
+    final idx = state.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+    await updateTask(state[idx].copyWith(status: TaskStatus.inProgress));
   }
 
-  Future<void> markCompleted(String id) async {
-    final task = state.firstWhere((t) => t.id == id);
+  /// Marca la tarea como completada. Devuelve [false] si el sequential lock
+  /// bloquea la acción (la tarea anterior del día no está completada).
+  Future<bool> markCompleted(String id) async {
+    final stateIdx = state.indexWhere((t) => t.id == id);
+    if (stateIdx == -1) return false;
+    final task = state[stateIdx];
     final dayTasks = tasksForDate(task.date)..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
 
     final idx = dayTasks.indexWhere((t) => t.id == id);
     if (idx > 0) {
       final prev = dayTasks[idx - 1];
-      if (prev.status != TaskStatus.completed) return; // sequential lock
+      if (prev.status != TaskStatus.completed) return false; // sequential lock
     }
 
     await updateTask(task.copyWith(status: TaskStatus.completed));
@@ -140,6 +191,7 @@ class TaskNotifier extends StateNotifier<List<Task>> {
 
     // Update blocks counter & check for unlock
     await _ref.read(settingsProvider.notifier).incrementCompletedBlocks();
+    final streak = await _ref.read(settingsProvider.notifier).recordTaskCompletion();
     final settings = _ref.read(settingsProvider);
     final blocks = settings.completedBlocks;
 
@@ -157,11 +209,43 @@ class TaskNotifier extends StateNotifier<List<Task>> {
       );
       await _repo.saveSession(session);
     }
+
+    // ── Social: fire-and-forget ───────────────────────────────
+    final social = _ref.read(socialProvider.notifier);
+    social.logActivity(
+      type: 'task_completed',
+      description: 'Completed: ${task.title}',
+    );
+    social.syncUserStats(
+      completedBlocks: blocks,
+      currentStreak: streak,
+    );
+    _updateChallengeProgress(social, 'tasks', blocks);
+    return true;
+  }
+
+  void _updateChallengeProgress(
+      SocialNotifier social, String type, int progress) {
+    final userId = _ref.read(socialProvider).currentUser?.id;
+    if (userId == null) return;
+    final active = _ref
+        .read(socialProvider)
+        .challenges
+        .where((c) => c.status == 'active' && c.type == type)
+        .toList();
+    for (final c in active) {
+      social.updateChallengeProgress(
+        challengeId: c.id,
+        myUserId: userId,
+        progress: progress,
+      );
+    }
   }
 
   Future<void> markPending(String id) async {
-    final task = state.firstWhere((t) => t.id == id);
-    await updateTask(task.copyWith(status: TaskStatus.pending));
+    final idx = state.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+    await updateTask(state[idx].copyWith(status: TaskStatus.pending));
   }
 
   // ─── Smart scheduling ─────────────────────────────────────────
@@ -201,10 +285,14 @@ class TaskNotifier extends StateNotifier<List<Task>> {
 
   Future<void> processCarryOvers() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     final overdueTasks = state.where((t) {
       if (t.status == TaskStatus.completed) return false;
-      if (t.endTime == null) return false;
-      return now.isAfter(t.endTime!);
+      if (t.endTime != null) return now.isAfter(t.endTime!);
+      // Sin hora: lleva si la fecha de la tarea es anterior a hoy
+      final taskDay = DateTime(t.date.year, t.date.month, t.date.day);
+      return taskDay.isBefore(today);
     }).toList();
 
     for (final task in overdueTasks) {
@@ -217,23 +305,25 @@ class TaskNotifier extends StateNotifier<List<Task>> {
           tasksForDate: tasksForDate,
         );
       } else {
-        // Calendar mode: try same time slot next day
-        final nextDay = task.date.add(const Duration(days: 1));
-        if (!_repo.taskExistsOnDate(task.title, nextDay)) {
+        // Sin hora → llevar a hoy; con hora → al día siguiente
+        final targetDay = task.endTime == null
+            ? today
+            : task.date.add(const Duration(days: 1));
+        if (!_repo.taskExistsOnDate(task.title, targetDay)) {
           reSlotted = task.copyWith(
             id: _uuid.v4(),
-            date: nextDay,
+            date: targetDay,
             startTime: task.startTime != null
-                ? DateTime(nextDay.year, nextDay.month, nextDay.day,
+                ? DateTime(targetDay.year, targetDay.month, targetDay.day,
                     task.startTime!.hour, task.startTime!.minute)
                 : null,
             endTime: task.endTime != null
-                ? DateTime(nextDay.year, nextDay.month, nextDay.day,
+                ? DateTime(targetDay.year, targetDay.month, targetDay.day,
                     task.endTime!.hour, task.endTime!.minute)
                 : null,
             status: TaskStatus.pending,
             isCarriedOver: true,
-            dayOrder: tasksForDate(nextDay).length,
+            dayOrder: tasksForDate(targetDay).length,
           );
         }
       }
@@ -256,11 +346,20 @@ class TaskNotifier extends StateNotifier<List<Task>> {
 
   Future<void> expandRecurringTasks(DateTime upTo) async {
     final parents = state.where((t) => t.isRecurringParent && t.recurrence != null).toList();
+    if (parents.isEmpty) return;
+
+    // Set de claves 'título|yyyy-m-d' construido una sola vez → O(1) por lookup
+    // en lugar de O(n) por cada llamada a taskExistsOnDate.
+    final existingKeys = <String>{
+      for (final t in state)
+        '${t.title.toLowerCase()}|${t.date.year}-${t.date.month}-${t.date.day}'
+    };
 
     for (final parent in parents) {
       DateTime? next = parent.recurrence!.nextOccurrence(parent.date);
       while (next != null && !next.isAfter(upTo)) {
-        if (!_repo.taskExistsOnDate(parent.title, next)) {
+        final key = '${parent.title.toLowerCase()}|${next.year}-${next.month}-${next.day}';
+        if (!existingKeys.contains(key)) {
           final instance = parent.copyWith(
             id: _uuid.v4(),
             date: next,
@@ -278,6 +377,7 @@ class TaskNotifier extends StateNotifier<List<Task>> {
           );
           await _repo.saveTask(instance);
           state = [...state, instance];
+          existingKeys.add(key); // mantener el Set sincronizado
         }
         next = parent.recurrence!.nextOccurrence(next);
       }
@@ -294,7 +394,7 @@ class TaskNotifier extends StateNotifier<List<Task>> {
   /// Returns a map with 'created' and 'updated' counts on success.
   /// Throws an [Exception] if the server is unreachable or returns an error.
   Future<Map<String, int>> syncWithServer() async {
-    final api = ApiService();
+    final api = ApiService(baseUrl: _ref.read(settingsProvider).apiBaseUrl);
     return api.bulkSync(state);
   }
 }
@@ -304,11 +404,15 @@ final taskProvider = StateNotifierProvider<TaskNotifier, List<Task>>(
 );
 
 final todayTasksProvider = Provider<List<Task>>((ref) {
-  final all = ref.watch(taskProvider);
   final today = DateTime.now();
   final d = DateTime(today.year, today.month, today.day);
-  return all
-      .where((t) => DateTime(t.date.year, t.date.month, t.date.day) == d)
-      .toList()
-    ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder));
+  // select: Riverpod solo propaga el cambio si el valor devuelto cambia (==).
+  // Para List esto usa igualdad por referencia; si Task implementa == por valor
+  // en el futuro, las actualizaciones de otros días no causarán rebuild aquí.
+  return ref.watch(
+    taskProvider.select((all) => all
+        .where((t) => DateTime(t.date.year, t.date.month, t.date.day) == d)
+        .toList()
+      ..sort((a, b) => a.dayOrder.compareTo(b.dayOrder))),
+  );
 });

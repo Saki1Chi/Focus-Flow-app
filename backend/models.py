@@ -33,3 +33,66 @@ class Task(Base):
     is_recurring_parent = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# ─── Social models ────────────────────────────────────────────────────────────
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=True)
+    avatar_emoji = Column(String, default="🧑")
+    avatar_color = Column(String, default="#4A90E2")
+    bio = Column(String, default="")
+    password_hash = Column(String, nullable=False)
+    token = Column(String, unique=True, nullable=True, index=True)
+    token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    completed_blocks = Column(Integer, default=0)
+    current_streak = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    requester_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String, default="pending")   # pending, accepted, rejected
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Challenge(Base):
+    __tablename__ = "challenges"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String, nullable=False)
+    challenger_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    challenged_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type = Column(String, default="blocks")      # blocks, tasks
+    target = Column(Integer, default=10)
+    start_date = Column(String, nullable=False)  # ISO date string
+    end_date = Column(String, nullable=False)    # ISO date string
+    status = Column(String, default="pending")   # pending, active, completed, rejected
+    challenger_progress = Column(Integer, default=0)
+    challenged_progress = Column(Integer, default=0)
+    winner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # task_completed | blocks_completed | challenge_won | streak_achieved | friend_added
+    type = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    data = Column(Text, nullable=True)           # JSON string for extra payload
+    is_public = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

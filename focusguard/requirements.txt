@@ -2,3 +2,8 @@ psutil
 plyer
 tkcalendar
 backports.zoneinfo; python_version < "3.9"
+requests
+pystray
+Pillow
+tzdata
+keyring

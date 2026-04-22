@@ -7,6 +7,7 @@ import '../screens/calendar/calendar_screen.dart';
 import '../screens/smart_mode/smart_mode_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/calendar/add_task_screen.dart';
+import '../screens/social/social_screen.dart';
 
 final _navIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -24,6 +25,7 @@ class AppShell extends ConsumerWidget {
       HomeScreen(),
       CalendarScreen(),
       SmartModeScreen(),
+      SocialScreen(),
       SettingsScreen(),
     ];
 
@@ -211,6 +213,11 @@ class _FloatingNavBar extends StatelessWidget {
       label: 'Smart'
     ),
     (
+      icon: Icons.people_outline_rounded,
+      active: Icons.people_rounded,
+      label: 'Social'
+    ),
+    (
       icon: Icons.settings_outlined,
       active: Icons.settings_rounded,
       label: 'Settings'
@@ -271,6 +278,7 @@ class _FloatingNavBar extends StatelessWidget {
                       onTap: () => onTap(i),
                       behavior: HitTestBehavior.opaque,
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           AnimatedContainer(
@@ -283,15 +291,7 @@ class _FloatingNavBar extends StatelessWidget {
                                   ? accent.withValues(alpha: 0.14)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(18),
-                              boxShadow: selected
-                                  ? [
-                                      BoxShadow(
-                                        color: accent.withValues(alpha: 0.24),
-                                        blurRadius: 12,
-                                        spreadRadius: -2,
-                                      )
-                                    ]
-                                  : null,
+                              // Sin sombra para evitar blurRadius inválidos en dispositivos con drivers raros.
                             ),
                             child: AnimatedScale(
                               scale: selected ? 1.12 : 1.0,
@@ -320,21 +320,15 @@ class _FloatingNavBar extends StatelessWidget {
                           const SizedBox(height: 3),
                           // Indicador deslizante bajo el ítem activo
                           AnimatedContainer(
-                            duration: const Duration(milliseconds: 280),
-                            curve: Curves.easeOutBack,
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic, // evita overshoot negativo
                             width: selected ? 18 : 0,
                             height: 3,
+                            constraints: const BoxConstraints(minWidth: 0),
                             decoration: BoxDecoration(
                               color: accent,
                               borderRadius: BorderRadius.circular(2),
-                              boxShadow: selected
-                                  ? [
-                                      BoxShadow(
-                                        color: accent.withValues(alpha: 0.65),
-                                        blurRadius: 6,
-                                      )
-                                    ]
-                                  : null,
+                              // Sin sombra para evitar asserts por blurRadius.
                             ),
                           ),
                         ],

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../core/constants/app_constants.dart';
 import '../data/models/task_model.dart';
 import '../data/models/category_model.dart';
+import 'task_mapper.dart';
 
 /// HTTP client that communicates with the FocusFlow CMS backend.
 ///
@@ -15,7 +16,12 @@ class ApiService {
   final String _base;
   static const _timeout = Duration(seconds: 15);
 
-  Map<String, String> get _headers => {'Content-Type': 'application/json'};
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (_token != null) 'X-Token': _token!,
+      };
+
+  String? _token;
 
   // ─── Tasks ────────────────────────────────────────────────────
 
@@ -106,43 +112,8 @@ class ApiService {
     }
   }
 
-  /// Converts a Task to snake_case JSON for the backend.
-  Map<String, dynamic> _taskToSnake(Task task) => {
-        'id': task.id,
-        'title': task.title,
-        'description': task.description,
-        'date': task.date.toIso8601String(),
-        'start_time': task.startTime?.toIso8601String(),
-        'end_time': task.endTime?.toIso8601String(),
-        'status': task.status.index,
-        'mode': task.mode.index,
-        'recurrence':
-            task.recurrence != null ? jsonEncode(task.recurrence!.toJson()) : null,
-        'is_carried_over': task.isCarriedOver,
-        'day_order': task.dayOrder,
-        'parent_id': task.parentId,
-        'is_recurring_parent': task.isRecurringParent,
-      };
-
-  /// Converts a backend snake_case response to camelCase for [Task.fromJson].
-  Map<String, dynamic> _snakeToCamel(dynamic json) {
-    final m = Map<String, dynamic>.from(json as Map);
-    return {
-      'id': m['id'],
-      'title': m['title'],
-      'description': m['description'] ?? '',
-      'date': m['date'],
-      'startTime': m['start_time'],
-      'endTime': m['end_time'],
-      'status': m['status'],
-      'mode': m['mode'],
-      'recurrence': m['recurrence'] != null
-          ? jsonDecode(m['recurrence'] as String)
-          : null,
-      'isCarriedOver': m['is_carried_over'] ?? false,
-      'dayOrder': m['day_order'] ?? 0,
-      'parentId': m['parent_id'],
-      'isRecurringParent': m['is_recurring_parent'] ?? false,
-    };
-  }
+  // La conversión Task ↔ JSON está centralizada en task_mapper.dart.
+  // Ver ese archivo para mantener sincronizado con backend/schemas.py.
+  Map<String, dynamic> _taskToSnake(Task task) => taskToSnake(task);
+  Map<String, dynamic> _snakeToCamel(dynamic json) => snakeToCamel(json);
 }
